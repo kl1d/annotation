@@ -1,0 +1,12 @@
+log_event_id,session_id,participant_id,source_file,line_number,timestamp_sec,event_class,raw_text,command,path,exit_code,extra_json
+L00001,S_P01,P01,assets/logs/P01/session.log,1,12.4,raw,ls,ls,,,{}
+L00002,S_P01,P01,assets/logs/P01/session.log,2,18.2,raw,cd challenge,cd,,,{}
+L00003,S_P01,P01,assets/logs/P01/session.log,3,44.0,raw,unzip backup.zip,unzip,,,{}
+L00004,S_P01,P01,assets/logs/P01/session.log,4,88.1,error,error: file corrupted,error,,,{}
+L00005,S_P01,P01,assets/logs/P01/session.log,5,120.7,raw,strings backup.zip,strings,,,{}
+L00006,S_P01,P01,assets/logs/P01/session.log,6,,raw,,,,,{}
+L00007,S_P02,P02,assets/logs/P02/session.log,1,9.0,raw,pwd,pwd,,,{}
+L00008,S_P02,P02,assets/logs/P02/session.log,2,20.5,raw,ls,ls,,,{}
+L00009,S_P02,P02,assets/logs/P02/session.log,3,31.4,raw,cat readme.txt,cat,,,{}
+L00010,S_P02,P02,assets/logs/P02/session.log,4,71.2,command,ssh admin@example,ssh,,,{}
+L00011,S_P02,P02,assets/logs/P02/session.log,5,95.6,failure,fail: permission denied,fail,,,{}

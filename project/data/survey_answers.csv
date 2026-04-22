@@ -1,0 +1,15 @@
+row_id,session_id,participant_id,survey_name,question_id,question_text,response,source_path
+1,S_P01,P01,pre,pre_experience_level,Experience level,intermediate,assets/surveys/pre_survey.csv
+2,S_P01,P01,pre,pre_ctf_familiarity,CTF familiarity,several_intermediate,assets/surveys/pre_survey.csv
+3,S_P01,P01,pre,pre_strategy,Planned strategy,Start with file discovery and low-risk checks,assets/surveys/pre_survey.csv
+4,S_P02,P02,pre,pre_experience_level,Experience level,beginner,assets/surveys/pre_survey.csv
+5,S_P02,P02,pre,pre_ctf_familiarity,CTF familiarity,first_time,assets/surveys/pre_survey.csv
+6,S_P02,P02,pre,pre_strategy,Planned strategy,Look for obvious clues first,assets/surveys/pre_survey.csv
+7,S_P01,P01,progression,progression_confidence,Mid-session confidence,medium,assets/surveys/progression_survey.csv
+8,S_P01,P01,progression,progression_notes,Mid-session notes,Felt stuck on the archive path for a few minutes,assets/surveys/progression_survey.csv
+9,S_P02,P02,progression,progression_confidence,Mid-session confidence,low,assets/surveys/progression_survey.csv
+10,S_P02,P02,progression,progression_notes,Mid-session notes,Unsure what the first command should be,assets/surveys/progression_survey.csv
+11,S_P01,P01,post,post_outcome,Outcome summary,partial,assets/surveys/post_survey.csv
+12,S_P01,P01,post,post_reflection,Reflection,The hints were helpful but some outputs were ambiguous,assets/surveys/post_survey.csv
+13,S_P02,P02,post,post_outcome,Outcome summary,none,assets/surveys/post_survey.csv
+14,S_P02,P02,post,post_reflection,Reflection,I needed clearer instructions at the start,assets/surveys/post_survey.csv

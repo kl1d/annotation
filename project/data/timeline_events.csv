@@ -1,0 +1,2 @@
+event_id,session_id,participant_id,start_time_sec,end_time_sec,source_type,task_path,event_type,title,observation,interpretation,evidence_note,confidence,follow_up,starred,created_at,updated_at
+

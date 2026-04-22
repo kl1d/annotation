@@ -1,0 +1,6 @@
+[12.4] ls
+[18.2] cd challenge
+[44.0] unzip backup.zip
+[88.1] error: file corrupted
+[120.7] strings backup.zip
+

@@ -1,0 +1,17 @@
+participant_folder_strategy: folder_name
+timestamp_patterns:
+  - name: bracket_seconds
+    regex: '^\[(?P<timestamp_sec>\d+(?:\.\d+)?)\]\s*(?P<raw>.*)$'
+command_patterns:
+  - regex: '^(?P<command>[A-Za-z0-9_.\/-]+)'
+event_class_rules:
+  - contains: error
+    event_class: error
+  - contains: fail
+    event_class: failure
+  - contains: success
+    event_class: success
+  - contains: ssh
+    event_class: command
+default_event_class: raw
+

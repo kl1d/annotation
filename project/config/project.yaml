@@ -1,0 +1,13 @@
+project_name: CTF-P Session Review
+paths:
+  videos_dir: assets/videos
+  logs_dir: assets/logs
+  surveys_dir: assets/surveys
+  data_dir: data
+matching:
+  participant_id_regex: '(?P<participant_id>P\d+)'
+  video_extensions:
+    - .mp4
+  log_extensions:
+    - .log
+

@@ -1,0 +1,38 @@
+surveys:
+  - survey_name: pre
+    file: assets/surveys/pre_survey.csv
+    participant_id_column: participant_id
+    participant_metadata_columns:
+      experience_level: experience_level
+      ctf_familiarity: ctf_familiarity
+    question_columns:
+      - column: experience_level
+        question_id: pre_experience_level
+        question_text: Experience level
+      - column: ctf_familiarity
+        question_id: pre_ctf_familiarity
+        question_text: CTF familiarity
+      - column: pre_strategy
+        question_id: pre_strategy
+        question_text: Planned strategy
+  - survey_name: progression
+    file: assets/surveys/progression_survey.csv
+    participant_id_column: participant_id
+    question_columns:
+      - column: progression_confidence
+        question_id: progression_confidence
+        question_text: Mid-session confidence
+      - column: progression_notes
+        question_id: progression_notes
+        question_text: Mid-session notes
+  - survey_name: post
+    file: assets/surveys/post_survey.csv
+    participant_id_column: participant_id
+    question_columns:
+      - column: post_outcome
+        question_id: post_outcome
+        question_text: Outcome summary
+      - column: post_reflection
+        question_id: post_reflection
+        question_text: Reflection
+
