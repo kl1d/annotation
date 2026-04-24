@@ -132,6 +132,24 @@ pre {
   font-weight: 600;
 }
 
+.github-star-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 170px;
+}
+
+.github-star-frame {
+  display: block;
+  border: 0;
+  overflow: hidden;
+  border-radius: 999px;
+}
+
+.nav-button-fallback {
+  display: none;
+}
+
 .nav-button-icon {
   font-size: 0.92rem;
   line-height: 1;
@@ -698,6 +716,10 @@ pre {
   .hero-nav {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .github-star-wrap {
+    justify-content: flex-start;
   }
 
   .site-nav {
