@@ -6,4 +6,8 @@ __pycache__/
 node_modules/
 dist/
 coverage/
-
+project/*
+!project/config/
+project/config/*
+!project/config/*.example.yaml
+!project/config/README.md
