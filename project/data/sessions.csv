@@ -1,3 +1,25 @@
 session_id,participant_id,video_path,log_path,pre_survey_path,progression_survey_path,post_survey_path,status,created_at
-S_P01,P01,,assets/logs/P01,assets/surveys/pre_survey.csv,assets/surveys/progression_survey.csv,assets/surveys/post_survey.csv,active,2026-04-22T21:19:02+00:00
-S_P02,P02,,assets/logs/P02,assets/surveys/pre_survey.csv,assets/surveys/progression_survey.csv,assets/surveys/post_survey.csv,active,2026-04-22T21:19:02+00:00
+S_p31@ctfp.app,p31@ctfp.app,,,"assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv",,,active,2026-04-22T22:20:11+00:00
+S_p32@ctfp.app,p32@ctfp.app,,,"assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv","assets/surveys/CTF-P: Progression Survey_April 13, 2026_18.11.csv",,active,2026-04-22T22:20:11+00:00
+S_p33@ctfp.app,p33@ctfp.app,,,"assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv","assets/surveys/CTF-P: Progression Survey_April 13, 2026_18.11.csv",,active,2026-04-22T22:20:11+00:00
+S_p34@ctfp.app,p34@ctfp.app,,,"assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv","assets/surveys/CTF-P: Progression Survey_April 13, 2026_18.11.csv",,active,2026-04-22T22:20:11+00:00
+S_p35@ctfp.app,p35@ctfp.app,,,"assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv","assets/surveys/CTF-P: Progression Survey_April 13, 2026_18.11.csv",,active,2026-04-22T22:20:11+00:00
+S_p36@ctfp.app,p36@ctfp.app,,,"assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv",,,active,2026-04-22T22:20:11+00:00
+S_p37@ctfp.app,p37@ctfp.app,,,"assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv","assets/surveys/CTF-P: Progression Survey_April 13, 2026_18.11.csv",,active,2026-04-22T22:20:11+00:00
+S_p38@ctfp.app,p38@ctfp.app,,,"assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv","assets/surveys/CTF-P: Progression Survey_April 13, 2026_18.11.csv",,active,2026-04-22T22:20:11+00:00
+S_p39@ctfp.app,p39@ctfp.app,,,"assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv","assets/surveys/CTF-P: Progression Survey_April 13, 2026_18.11.csv",,active,2026-04-22T22:20:11+00:00
+S_p40@ctfp.app,p40@ctfp.app,,,"assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv","assets/surveys/CTF-P: Progression Survey_April 13, 2026_18.11.csv",,active,2026-04-22T22:20:11+00:00
+S_p41@ctfp.app,p41@ctfp.app,,,"assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv","assets/surveys/CTF-P: Progression Survey_April 13, 2026_18.11.csv",,active,2026-04-22T22:20:11+00:00
+S_p42@ctfp.app,p42@ctfp.app,,,"assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv","assets/surveys/CTF-P: Progression Survey_April 13, 2026_18.11.csv",,active,2026-04-22T22:20:11+00:00
+S_p43@ctfp.app,p43@ctfp.app,,,"assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv",,,active,2026-04-22T22:20:11+00:00
+S_p44@ctfp.app,p44@ctfp.app,assets/videos/GMT20260403-040314_Recording_as_1920x1080.mp4,assets/logs/participant44-b3324ecc-1eeb-4d3c-866d-eaaebed363b1,"assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv","assets/surveys/CTF-P: Progression Survey_April 13, 2026_18.11.csv",,active,2026-04-22T22:20:11+00:00
+S_p45@ctfp.app,p45@ctfp.app,,,"assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv","assets/surveys/CTF-P: Progression Survey_April 13, 2026_18.11.csv",,active,2026-04-22T22:20:11+00:00
+S_p46@ctfp.app,p46@ctfp.app,,,"assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv","assets/surveys/CTF-P: Progression Survey_April 13, 2026_18.11.csv",,active,2026-04-22T22:20:11+00:00
+S_p47@ctfp.app,p47@ctfp.app,,,"assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv",,,active,2026-04-22T22:20:11+00:00
+S_p48@ctfp.app,p48@ctfp.app,,,"assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv","assets/surveys/CTF-P: Progression Survey_April 13, 2026_18.11.csv",,active,2026-04-22T22:20:11+00:00
+S_p49@ctfp.app,p49@ctfp.app,,,"assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv","assets/surveys/CTF-P: Progression Survey_April 13, 2026_18.11.csv",,active,2026-04-22T22:20:11+00:00
+S_p50@ctfp.app,p50@ctfp.app,,,"assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv",,,active,2026-04-22T22:20:11+00:00
+S_p51@ctfp.app,p51@ctfp.app,,,"assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv",,,active,2026-04-22T22:20:11+00:00
+S_p52@ctfp.app,p52@ctfp.app,,,"assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv",,,active,2026-04-22T22:20:11+00:00
+S_p53@ctfp.app,p53@ctfp.app,,,"assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv","assets/surveys/CTF-P: Progression Survey_April 13, 2026_18.11.csv",,active,2026-04-22T22:20:11+00:00
+S_p54@ctfp.app,p54@ctfp.app,,,"assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv","assets/surveys/CTF-P: Progression Survey_April 13, 2026_18.11.csv",,active,2026-04-22T22:20:11+00:00

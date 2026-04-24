@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.59.0",
+    "ag-grid-community": "^35.2.1",
+    "ag-grid-react": "^35.2.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.27.0"
@@ -22,4 +24,3 @@
     "vite": "^5.4.8"
   }
 }
-

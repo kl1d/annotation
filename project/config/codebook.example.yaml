@@ -1,0 +1,16 @@
+tags:
+  - tag_id: T001
+    name: persistence
+    category: trait
+    color: "#1F6FEB"
+    description: Sustained effort on the same path
+  - tag_id: T002
+    name: confusion
+    category: emergent_behavior
+    color: "#E5532D"
+    description: Visible uncertainty or misunderstanding
+  - tag_id: T003
+    name: pivot
+    category: session_process
+    color: "#6F42C1"
+    description: Participant changes direction or tactic

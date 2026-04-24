@@ -14,18 +14,6 @@ file_rules:
   - glob: activity.log
     default_event_class: activity
     line_regex: '^[A-Z][a-z]{2}\s+\d+\s+\d+:\d+:\d+\s+[^:]+:\s+\[(?P<event_class>[^\]]+)\]\s*(?P<raw>.*)$'
-  - glob: setup.log
-    default_event_class: setup
-    line_regex: '^[A-Z][a-z]{2}\s+\d+\s+\d+:\d+:\d+\s+[^:]+:\s+\[(?P<event_class>[^\]]+)\]\s*(?P<raw>.*)$'
-  - glob: process.log
-    default_event_class: process
-    line_regex: '^[A-Z][a-z]{2}\s+\d+\s+\d+:\d+:\d+\s+[^:]+:\s+\[(?P<event_class>[^\]]+)\]\s*(?P<raw>.*)$'
-  - glob: file-access.log
-    default_event_class: file_access
-    line_regex: '^[A-Z][a-z]{2}\s+\d+\s+\d+:\d+:\d+\s+[^:]+:\s+\[(?P<event_class>[^\]]+)\]\s*(?P<raw>.*)$'
-  - glob: file-content.log
-    default_event_class: file_content
-    line_regex: '^[A-Z][a-z]{2}\s+\d+\s+\d+:\d+:\d+\s+[^:]+:\s+\[(?P<event_class>[^\]]+)\]\s*(?P<raw>.*)$'
   - glob: session-index.log
     default_event_class: session_index
     line_regex: '^\[(?P<timestamp_iso>[^\]]+)\]\s+(?P<event_class>\w+)\s+(?P<raw>.*)$'
@@ -36,7 +24,4 @@ event_class_rules:
     event_class: failure
   - contains: success
     event_class: success
-  - contains: ssh
-    event_class: command
 default_event_class: raw
-

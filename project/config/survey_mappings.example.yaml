@@ -1,6 +1,6 @@
 surveys:
   - survey_name: pre
-    file: 'assets/surveys/CTF-P: Registration + Pre-Challenge_April 9, 2026_18.18.csv'
+    file: assets/surveys/pre_survey.csv
     format: qualtrics
     machine_header_row_index: 0
     question_text_row_index: 1
@@ -31,14 +31,9 @@ surveys:
       - LocationLongitude
       - DistributionChannel
       - UserLanguage
-      - Q_RecaptchaScore
-      - Q_DuplicateRespondent
-      - email
-      - asu_email
-      - asu_email_11_TEXT
     include_only_non_empty: true
   - survey_name: progression
-    file: 'assets/surveys/CTF-P: Progression Survey_April 13, 2026_18.11.csv'
+    file: assets/surveys/progression_survey.csv
     format: qualtrics
     machine_header_row_index: 0
     question_text_row_index: 1
@@ -67,11 +62,6 @@ surveys:
       - LocationLongitude
       - DistributionChannel
       - UserLanguage
-      - Q_RecaptchaScore
-      - Q_DuplicateRespondent
-      - email
-      - asu_email
-      - asu_email_11_TEXT
     include_only_non_empty: true
   - survey_name: post
     file: assets/surveys/post_survey.csv

@@ -9,6 +9,16 @@ class ProjectSummary(BaseModel):
     paths: dict[str, str]
 
 
+class ConfigFile(BaseModel):
+    name: str
+    path: str
+    content: str
+
+
+class ConfigFileUpdate(BaseModel):
+    content: str
+
+
 class SessionSummary(BaseModel):
     session_id: str
     participant_id: str
@@ -94,3 +104,20 @@ class SessionDetail(BaseModel):
     logs: list[dict[str, Any]]
     surveys: list[dict[str, Any]]
 
+
+class SessionCsvFile(BaseModel):
+    file_id: str
+    label: str
+    path: str
+    description: str = ""
+    row_count: int = 0
+
+
+class SessionCsvPreview(BaseModel):
+    file_id: str
+    label: str
+    path: str
+    description: str = ""
+    columns: list[str]
+    rows: list[dict[str, str]]
+    row_count: int = 0

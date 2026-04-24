@@ -1,0 +1,33 @@
+event_types:
+  - choice
+  - attempt
+  - failure
+  - retry_loop
+  - debug
+  - pivot
+  - suspected_deception
+  - abandon
+  - success
+  - design_issue
+  - other
+source_types:
+  - video
+  - log
+  - survey
+  - mixed
+confidence_values:
+  - low
+  - medium
+  - high
+required_event_fields:
+  - start_time_sec
+  - event_type
+  - title
+optional_event_fields:
+  - end_time_sec
+  - task_path
+  - observation
+  - interpretation
+  - evidence_note
+  - follow_up
+  - starred

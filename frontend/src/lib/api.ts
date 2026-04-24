@@ -1,4 +1,6 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
+export const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
+export const APP_BASE_URL = API_BASE_URL.replace(/\/api$/, "");
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -116,6 +118,12 @@ export type ProjectConfig = {
   paths: Record<string, string>;
 };
 
+export type ConfigFile = {
+  name: string;
+  path: string;
+  content: string;
+};
+
 export type IngestResult = {
   participants: number;
   sessions: number;
@@ -124,11 +132,42 @@ export type IngestResult = {
   tags_seeded: number;
 };
 
+export type SessionCsvFile = {
+  file_id: string;
+  label: string;
+  path: string;
+  description: string;
+  row_count: number;
+};
+
+export type SessionCsvPreview = {
+  file_id: string;
+  label: string;
+  path: string;
+  description: string;
+  columns: string[];
+  rows: Record<string, string>[];
+  row_count: number;
+};
+
 export const api = {
   getConfig: () => request<ProjectConfig>("/config"),
+  getConfigFiles: () => request<ConfigFile[]>("/config/files"),
+  getDataFiles: () => request<SessionCsvFile[]>("/data/files"),
+  getDataFilePreview: (fileId: string) =>
+    request<SessionCsvPreview>(`/data/files/${fileId}`),
+  saveConfigFile: (name: string, content: string) =>
+    request<ConfigFile>(`/config/files/${name}`, {
+      method: "PUT",
+      body: JSON.stringify({ content }),
+    }),
   getSessions: () => request<SessionSummary[]>("/sessions"),
   ingestSessions: () => request<IngestResult>("/sessions/ingest", { method: "POST" }),
   getSession: (sessionId: string) => request<SessionDetail>(`/sessions/${sessionId}`),
+  getSessionCsvFiles: (sessionId: string) =>
+    request<SessionCsvFile[]>(`/sessions/${sessionId}/csv-files`),
+  getSessionCsvPreview: (sessionId: string, fileId: string) =>
+    request<SessionCsvPreview>(`/sessions/${sessionId}/csv-files/${fileId}`),
   getTags: () => request<Tag[]>("/tags"),
   createEvent: (sessionId: string, payload: Record<string, unknown>) =>
     request<TimelineEvent>(`/sessions/${sessionId}/events`, {
@@ -143,4 +182,3 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 };
-

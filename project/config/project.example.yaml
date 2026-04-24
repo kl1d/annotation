@@ -1,11 +1,11 @@
-project_name: CTF-P Session Review
+project_name: Example Annotation Study
 paths:
   videos_dir: assets/videos
   logs_dir: assets/logs
   surveys_dir: assets/surveys
   data_dir: data
 matching:
-  participant_id_regex: '(?P<participant_id>(?:P\d+|p\d+@ctfp\.app))'
+  participant_id_regex: '(?P<participant_id>[A-Za-z0-9._@-]+)'
   video_extensions:
     - .mp4
   log_extensions:
