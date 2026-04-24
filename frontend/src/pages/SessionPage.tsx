@@ -35,9 +35,8 @@ const initialDraft: EventDraft = {
   tag_ids: [],
 };
 
-type CanvasTab = "video" | "logs" | "surveys" | "notes" | "files";
+type CanvasTab = "video" | "logs" | "surveys" | "notes";
 type WorkbenchTab = "event" | "memo" | "notes";
-type CsvSortDirection = "asc" | "desc";
 
 const EVENT_TYPE_OPTIONS = [
   "choice",
@@ -112,10 +111,6 @@ export default function SessionPage() {
   const [canvasTab, setCanvasTab] = useState<CanvasTab>("video");
   const [workbenchTab, setWorkbenchTab] = useState<WorkbenchTab>("event");
   const [selectedLogFile, setSelectedLogFile] = useState("all");
-  const [selectedCsvFileId, setSelectedCsvFileId] = useState("");
-  const [csvSearch, setCsvSearch] = useState("");
-  const [csvSortColumn, setCsvSortColumn] = useState("");
-  const [csvSortDirection, setCsvSortDirection] = useState<CsvSortDirection>("asc");
   const [startTimeInput, setStartTimeInput] = useState("00:00");
   const [endTimeInput, setEndTimeInput] = useState("");
   const [videoCurrentTime, setVideoCurrentTime] = useState(0);
@@ -132,17 +127,6 @@ export default function SessionPage() {
     queryKey: ["tags"],
     queryFn: api.getTags,
   });
-  const csvFilesQuery = useQuery({
-    queryKey: ["session", sessionId, "csv-files"],
-    queryFn: () => api.getSessionCsvFiles(sessionId),
-    enabled: Boolean(sessionId),
-  });
-  const csvPreviewQuery = useQuery({
-    queryKey: ["session", sessionId, "csv-file", selectedCsvFileId],
-    queryFn: () => api.getSessionCsvPreview(sessionId, selectedCsvFileId),
-    enabled: Boolean(sessionId && selectedCsvFileId && canvasTab === "files"),
-  });
-
   const createEventMutation = useMutation({
     mutationFn: (payload: EventDraft) => api.createEvent(sessionId, payload),
     onSuccess: async () => {
@@ -203,22 +187,6 @@ export default function SessionPage() {
     window.localStorage.setItem(`workspace-notes:${sessionId}`, workspaceNotes);
   }, [sessionId, workspaceNotes]);
 
-  useEffect(() => {
-    if (!csvFilesQuery.data?.length) {
-      return;
-    }
-    if (selectedCsvFileId && csvFilesQuery.data.some((file) => file.file_id === selectedCsvFileId)) {
-      return;
-    }
-    setSelectedCsvFileId(csvFilesQuery.data[0].file_id);
-  }, [csvFilesQuery.data, selectedCsvFileId]);
-
-  useEffect(() => {
-    setCsvSearch("");
-    setCsvSortColumn("");
-    setCsvSortDirection("asc");
-  }, [selectedCsvFileId]);
-
   const groupedSurveys = useMemo(() => {
     const source = sessionQuery.data?.surveys ?? [];
     return source.reduce<Record<string, typeof source>>((acc, row) => {
@@ -250,34 +218,6 @@ export default function SessionPage() {
 
   const timelineEvents = sessionQuery.data?.events ?? [];
   const timelineLanes = useMemo(() => buildTimelineLanes(timelineEvents), [timelineEvents]);
-  const visibleCsvRows = useMemo(() => {
-    const preview = csvPreviewQuery.data;
-    if (!preview) {
-      return [];
-    }
-
-    const filteredRows = preview.rows.filter((row) => {
-      if (!csvSearch.trim()) {
-        return true;
-      }
-      const search = csvSearch.trim().toLowerCase();
-      return preview.columns.some((column) => (row[column] ?? "").toLowerCase().includes(search));
-    });
-
-    if (!csvSortColumn) {
-      return filteredRows;
-    }
-
-    return [...filteredRows].sort((left, right) => {
-      const leftValue = left[csvSortColumn] ?? "";
-      const rightValue = right[csvSortColumn] ?? "";
-      const comparison = leftValue.localeCompare(rightValue, undefined, {
-        numeric: true,
-        sensitivity: "base",
-      });
-      return csvSortDirection === "asc" ? comparison : -comparison;
-    });
-  }, [csvPreviewQuery.data, csvSearch, csvSortColumn, csvSortDirection]);
   const timelineMaxSec = useMemo(() => {
     const eventMax = timelineEvents.reduce((max, item) => {
       const endTime = Number(item.end_time_sec || item.start_time_sec || 0);
@@ -350,6 +290,15 @@ export default function SessionPage() {
     setVideoCurrentTime(nextTime);
   }
 
+  function useCurrentVideoTimeFor(field: "start" | "end") {
+    const formatted = formatTimeInput(videoCurrentTime);
+    if (field === "start") {
+      updateStartTimeInput(formatted);
+      return;
+    }
+    updateEndTimeInput(formatted);
+  }
+
   function jumpToTimelineEvent(item: TimelineEvent) {
     const startTime = Number(item.start_time_sec || 0);
     setSelectedTimelineEventId(item.event_id);
@@ -386,16 +335,6 @@ export default function SessionPage() {
     }));
   }
 
-  function toggleCsvSort(column: string) {
-    if (csvSortColumn === column) {
-      setCsvSortDirection((current) => (current === "asc" ? "desc" : "asc"));
-      return;
-    }
-
-    setCsvSortColumn(column);
-    setCsvSortDirection("asc");
-  }
-
   if (sessionQuery.isLoading) {
     return <section className="page">Loading session...</section>;
   }
@@ -425,7 +364,7 @@ export default function SessionPage() {
         <div className="review-panel review-canvas-panel">
           <div className="review-panel-header">
             <div className="panel-tab-row">
-              {(["video", "logs", "surveys", "notes", "files"] as CanvasTab[]).map((tab) => (
+              {(["video", "logs", "surveys", "notes"] as CanvasTab[]).map((tab) => (
                 <button
                   className={`panel-tab ${canvasTab === tab ? "active" : ""}`}
                   key={tab}
@@ -457,6 +396,27 @@ export default function SessionPage() {
                       setVideoCurrentTime(event.currentTarget.currentTime || 0);
                     }}
                   />
+                  <div className="video-transport-bar">
+                    <button
+                      className="ghost-button video-jump-button"
+                      disabled={videoDuration <= 0}
+                      onClick={() => jumpVideo(Math.max(0, videoCurrentTime - 10))}
+                      type="button"
+                    >
+                      -10s
+                    </button>
+                    <span className="timeline-time-readout video-time-readout">
+                      {formatSeconds(String(videoCurrentTime))} / {formatSeconds(String(timelineMaxSec))}
+                    </span>
+                    <button
+                      className="ghost-button video-jump-button"
+                      disabled={videoDuration <= 0}
+                      onClick={() => jumpVideo(videoCurrentTime + 10)}
+                      type="button"
+                    >
+                      +10s
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="review-empty">
@@ -560,75 +520,6 @@ export default function SessionPage() {
               </div>
             ) : null}
 
-            {canvasTab === "files" ? (
-              <div className="canvas-stack csv-viewer">
-                <div className="csv-file-tabs">
-                  {csvFilesQuery.data?.map((file) => (
-                    <button
-                      className={`csv-file-tab ${selectedCsvFileId === file.file_id ? "active" : ""}`}
-                      key={file.file_id}
-                      onClick={() => setSelectedCsvFileId(file.file_id)}
-                      type="button"
-                    >
-                      <span>{file.label}</span>
-                      <span className="pill subtle">{file.row_count}</span>
-                    </button>
-                  ))}
-                </div>
-                <div className="csv-viewer-toolbar">
-                  <div>
-                    <strong>{csvPreviewQuery.data?.label ?? "CSV file"}</strong>
-                    <p className="muted small">{csvPreviewQuery.data?.path}</p>
-                  </div>
-                  <label className="csv-search-field">
-                    <span className="small muted">Search</span>
-                    <input
-                      placeholder="Filter rows"
-                      type="search"
-                      value={csvSearch}
-                      onChange={(event) => setCsvSearch(event.target.value)}
-                    />
-                  </label>
-                </div>
-                <div className="csv-table-wrap">
-                  {csvPreviewQuery.isLoading ? (
-                    <div className="review-empty">Loading CSV preview…</div>
-                  ) : csvPreviewQuery.data ? (
-                    <table className="csv-viewer-table">
-                      <thead>
-                        <tr>
-                          {csvPreviewQuery.data.columns.map((column) => (
-                            <th key={column}>
-                              <button
-                                className="csv-sort-button"
-                                onClick={() => toggleCsvSort(column)}
-                                type="button"
-                              >
-                                {column}
-                                <span className="sort-indicator">
-                                  {csvSortColumn === column ? (csvSortDirection === "asc" ? "↑" : "↓") : "↕"}
-                                </span>
-                              </button>
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {visibleCsvRows.map((row, index) => (
-                          <tr key={`${csvPreviewQuery.data?.file_id}-${index}`}>
-                            {csvPreviewQuery.data.columns.map((column) => (
-                              <td key={`${column}-${index}`}>{row[column] || ""}</td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <div className="review-empty">Choose a CSV file to inspect.</div>
-                  )}
-                </div>
-              </div>
-            ) : null}
           </div>
 
         </div>
@@ -658,23 +549,45 @@ export default function SessionPage() {
                 <form className="form-grid workbench-form" noValidate onSubmit={handleSubmit}>
                   <label>
                     Start time (mm:ss)
-                    <input
-                      aria-invalid={Boolean(timeError)}
-                      inputMode="numeric"
-                      placeholder="00:00"
-                      value={startTimeInput}
-                      onChange={(event) => updateStartTimeInput(event.target.value)}
-                    />
+                    <div className="input-with-action">
+                      <input
+                        aria-invalid={Boolean(timeError)}
+                        inputMode="numeric"
+                        placeholder="00:00"
+                        value={startTimeInput}
+                        onChange={(event) => updateStartTimeInput(event.target.value)}
+                      />
+                      <button
+                        aria-label="Use current video time for start time"
+                        className="icon-button"
+                        disabled={videoDuration <= 0}
+                        onClick={() => useCurrentVideoTimeFor("start")}
+                        type="button"
+                      >
+                        <TimeCaptureIcon />
+                      </button>
+                    </div>
                   </label>
                   <label>
                     End time (mm:ss)
-                    <input
-                      aria-invalid={Boolean(timeError)}
-                      inputMode="numeric"
-                      placeholder="optional"
-                      value={endTimeInput}
-                      onChange={(event) => updateEndTimeInput(event.target.value)}
-                    />
+                    <div className="input-with-action">
+                      <input
+                        aria-invalid={Boolean(timeError)}
+                        inputMode="numeric"
+                        placeholder="optional"
+                        value={endTimeInput}
+                        onChange={(event) => updateEndTimeInput(event.target.value)}
+                      />
+                      <button
+                        aria-label="Use current video time for end time"
+                        className="icon-button"
+                        disabled={videoDuration <= 0}
+                        onClick={() => useCurrentVideoTimeFor("end")}
+                        type="button"
+                      >
+                        <TimeCaptureIcon />
+                      </button>
+                    </div>
                   </label>
                   {timeError ? (
                     <div className="form-error full-span" role="alert">
@@ -904,44 +817,7 @@ export default function SessionPage() {
       <div className="review-panel timeline-editor-panel">
         <div className="timeline-editor-header">
           <h3>Timeline</h3>
-          <div className="timeline-dock-actions">
-            <div className="timeline-transport">
-              <button
-                className="ghost-button"
-                disabled={videoDuration <= 0}
-                onClick={() => jumpVideo(Math.max(0, videoCurrentTime - 10))}
-                type="button"
-              >
-                -10s
-              </button>
-              <span className="timeline-time-readout">
-                {formatSeconds(String(videoCurrentTime))} / {formatSeconds(String(timelineMaxSec))}
-              </span>
-              <button
-                className="ghost-button"
-                disabled={videoDuration <= 0}
-                onClick={() => jumpVideo(videoCurrentTime + 10)}
-                type="button"
-              >
-                +10s
-              </button>
-              <button
-                className="primary-button"
-                disabled={videoDuration <= 0}
-                onClick={() => updateStartTimeInput(formatTimeInput(videoCurrentTime))}
-                type="button"
-              >
-                Use Current Time
-              </button>
-            </div>
-            <button
-              className="ghost-button"
-              onClick={() => jumpVideo(draft.start_time_sec)}
-              type="button"
-            >
-              Draft
-            </button>
-          </div>
+          <span className="pill subtle">{timelineEvents.length} events</span>
         </div>
 
         <div className="timeline-ruler">
@@ -1222,4 +1098,13 @@ function toneForEventType(value: string) {
     return "insight";
   }
   return "default";
+}
+
+function TimeCaptureIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <circle cx="10" cy="10" r="6.4" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M10 6.2v4l2.6 1.6" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
+    </svg>
+  );
 }

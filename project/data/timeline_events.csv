@@ -1,8 +1,1 @@
 event_id,session_id,participant_id,start_time_sec,end_time_sec,source_type,task_path,event_type,title,observation,interpretation,evidence_note,confidence,follow_up,starred,created_at,updated_at
-E0001,S_p44@ctfp.app,p44@ctfp.app,100.0,,video,,other,,,,,medium,,false,2026-04-22T22:26:07+00:00,2026-04-22T22:26:07+00:00
-E0002,S_p44@ctfp.app,p44@ctfp.app,261.0,,video,,other,,,,,medium,,false,2026-04-23T08:59:41+00:00,2026-04-23T08:59:41+00:00
-E0003,S_p44@ctfp.app,p44@ctfp.app,1778.0,,video,,other,,,,,medium,,false,2026-04-23T08:59:47+00:00,2026-04-23T08:59:47+00:00
-E0004,S_p44@ctfp.app,p44@ctfp.app,2520.0,,video,,other,,,,,medium,,false,2026-04-23T08:59:52+00:00,2026-04-23T08:59:52+00:00
-E0005,S_p44@ctfp.app,p44@ctfp.app,160.0,,video,,other,,,,,medium,,false,2026-04-23T09:00:02+00:00,2026-04-23T09:00:02+00:00
-E0006,S_p44@ctfp.app,p44@ctfp.app,3667.0,,video,,failure,Failure,,,,medium,,false,2026-04-23T10:44:40+00:00,2026-04-23T10:44:40+00:00
-E0007,S_p44@ctfp.app,p44@ctfp.app,4868.0,,video,,success,Success,,,,medium,,false,2026-04-23T10:45:13+00:00,2026-04-23T10:45:13+00:00

@@ -11,7 +11,7 @@ from app.services.project_service import ProjectService
 project_root = Path(os.environ.get("PROJECT_ROOT", "/project")).resolve()
 project_service = ProjectService(project_root)
 
-app = FastAPI(title="CTF-P Annotation App")
+app = FastAPI(title="Annotation Workbench API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

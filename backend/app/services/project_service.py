@@ -175,7 +175,7 @@ class ProjectService:
     def project_summary(self) -> ProjectSummary:
         project_config = self.load_yaml("project.yaml")
         return ProjectSummary(
-            project_name=project_config.get("project_name", "CTF-P Annotation Project"),
+            project_name=project_config.get("project_name", "Annotation Workbench Project"),
             participant_id_regex=project_config.get("matching", {}).get(
                 "participant_id_regex", "(?P<participant_id>[A-Za-z0-9_-]+)"
             ),

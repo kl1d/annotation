@@ -1,0 +1,5 @@
+sessions:
+  - participant_id: participant01@example.org
+    log_dir: assets/logs/participant01
+    video_file: assets/videos/session01.mp4
+    note: Optional explicit mapping when filenames do not encode participant IDs.

@@ -1,6 +1,4 @@
 tag_id,name,category,color,description,archived
 T001,persistence,trait,#1F6FEB,Sustained effort on the same path,false
 T002,confusion,emergent_behavior,#E5532D,Visible uncertainty or misunderstanding,false
-T003,design_issue,design_validation,#B42318,Possible flaw or ambiguity in study design,false
-T004,pivot,session_process,#6F42C1,Participant changes direction or tactic,false
-T005,success,session_process,#1A7F37,Meaningful progress or resolution,false
+T003,pivot,session_process,#6F42C1,Participant changes direction or tactic,false

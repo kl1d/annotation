@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Annotation Workbench</title>
+    <meta
+      name="description"
+      content="Annotation Workbench is a Dockerized, local-first tool for qualitative session review across video, logs, surveys, and annotation timelines."
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <section class="hero-shell">
+        <header class="hero-nav">
+          <a class="brand" href="https://github.com/kl1d/annotation" target="_blank" rel="noreferrer">
+            <img src="./logo.svg" alt="Annotation Workbench logo" class="brand-logo" />
+            <span>Annotation Workbench</span>
+          </a>
+          <nav class="site-nav">
+            <a href="#features">Features</a>
+            <a href="#workflow">Workflow</a>
+            <a href="#run">Run</a>
+            <a href="#docs">Docs</a>
+          </nav>
+          <a class="nav-button" href="https://github.com/kl1d/annotation" target="_blank" rel="noreferrer">
+            <span class="nav-button-icon" aria-hidden="true">★</span>
+            <span>Star on GitHub</span>
+          </a>
+        </header>
+
+        <div class="hero-frame hero-line-top">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+
+        <div class="hero-content">
+          <span class="hero-chip">Qualitative Session Review</span>
+          <h1>Turn session recordings into structured qualitative insight.</h1>
+          <p class="hero-text">
+            Review screen recordings, annotate meaningful moments, connect logs and surveys, and
+            export coded evidence from one local-first research workspace.
+          </p>
+          <div class="hero-actions">
+            <a class="primary-link" href="#run">Get Started</a>
+            <a class="secondary-link" href="#features">See Features</a>
+          </div>
+        </div>
+
+        <div class="hero-frame hero-line-bottom">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+
+        <div class="hero-product-card">
+          <div class="product-preview-grid">
+            <section class="preview-panel preview-left">
+              <div class="preview-head">
+                <span class="preview-badge">Review Session</span>
+                <strong>Screen Recording</strong>
+              </div>
+              <div class="preview-video">
+                <div class="terminal-topline">
+                  <span class="terminal-dot red"></span>
+                  <span class="terminal-dot yellow"></span>
+                  <span class="terminal-dot green"></span>
+                </div>
+                <div class="terminal-body">
+                  <p><span class="prompt">user@session:~$</span> ls -la</p>
+                  <p>total 48</p>
+                  <p>drwxr-xr-x 5 user user 4096 May 10 10:15 .</p>
+                  <p>drwxr-xr-x 3 root root 4096 May 10 09:58 ..</p>
+                  <p>-rw-r--r-- 1 user user 220 May 10 09:31 .bash_logout</p>
+                  <p>-rw-r--r-- 1 user user 348 May 10 09:58 .bashrc</p>
+                  <p><span class="prompt">user@session:~$</span> cat note.txt</p>
+                  <p>Looks like the backup script runs at night…</p>
+                </div>
+              </div>
+              <div class="preview-toolbar">
+                <span class="play-button">▶</span>
+                <span>12:43 / 45:12</span>
+                <span class="toolbar-meta">1.0x</span>
+              </div>
+            </section>
+
+            <section class="preview-panel preview-right">
+              <div class="preview-head">
+                <span class="preview-badge subtle">Notes</span>
+                <strong>Annotations</strong>
+              </div>
+              <div class="note-stack">
+                <article class="note-card decision">
+                  <div class="note-topline">
+                    <span>Decision</span>
+                    <time>00:02:13</time>
+                  </div>
+                  <p>Started by listing files to understand the environment.</p>
+                </article>
+                <article class="note-card observation">
+                  <div class="note-topline">
+                    <span>Observation</span>
+                    <time>00:08:31</time>
+                  </div>
+                  <p>Found `note.txt` mentioning a backup script.</p>
+                </article>
+                <article class="note-card insight">
+                  <div class="note-topline">
+                    <span>Insight</span>
+                    <time>00:12:43</time>
+                  </div>
+                  <p>Trying wordlist attack with `rockyou.txt` against the backup zip.</p>
+                </article>
+                <article class="note-card action">
+                  <div class="note-topline">
+                    <span>Action</span>
+                    <time>00:18:07</time>
+                  </div>
+                  <p>Switched to SQL injection on port 8000.</p>
+                </article>
+              </div>
+            </section>
+          </div>
+
+          <section class="preview-panel timeline-preview">
+            <div class="preview-head">
+              <strong>Annotation Timeline</strong>
+              <span class="preview-badge subtle">Coded moments</span>
+            </div>
+            <div class="timeline-ruler">
+              <span>00:00</span>
+              <span>00:05</span>
+              <span>00:10</span>
+              <span>00:15</span>
+              <span>00:20</span>
+              <span>00:25</span>
+              <span>00:30</span>
+              <span>00:35</span>
+              <span>00:40</span>
+              <span>00:45</span>
+            </div>
+            <div class="timeline-track">
+              <div class="timeline-event decision" style="left: 6%; width: 10%;">
+                <span>Decision</span>
+                <small>02:13</small>
+              </div>
+              <div class="timeline-event observation" style="left: 20%; width: 10%;">
+                <span>Observation</span>
+                <small>08:31</small>
+              </div>
+              <div class="timeline-event insight" style="left: 34%; width: 10%;">
+                <span>Insight</span>
+                <small>12:43</small>
+              </div>
+              <div class="timeline-event action" style="left: 48%; width: 10%;">
+                <span>Action</span>
+                <small>18:07</small>
+              </div>
+              <div class="timeline-event decision" style="left: 63%; width: 10%;">
+                <span>Decision</span>
+                <small>24:22</small>
+              </div>
+              <div class="timeline-event insight" style="left: 78%; width: 10%;">
+                <span>Insight</span>
+                <small>31:02</small>
+              </div>
+            </div>
+          </section>
+
+          <section class="preview-panel table-preview">
+            <div class="preview-head">
+              <strong>Data Explorer</strong>
+              <div class="table-tabs">
+                <span class="active">Logs</span>
+                <span>Surveys</span>
+                <span>System Events</span>
+              </div>
+            </div>
+            <div class="table-shell">
+              <div class="table-row table-head">
+                <span>Timestamp</span>
+                <span>Event Type</span>
+                <span>Source</span>
+                <span>Details</span>
+                <span>Outcome</span>
+                <span>Tag</span>
+              </div>
+              <div class="table-row">
+                <span>00:00:45</span>
+                <span>Command</span>
+                <span>Terminal</span>
+                <span>ls -la</span>
+                <span>Success</span>
+                <span class="tag-chip blue">Recon</span>
+              </div>
+              <div class="table-row">
+                <span>00:02:13</span>
+                <span>Command</span>
+                <span>Terminal</span>
+                <span>cat note.txt</span>
+                <span>Success</span>
+                <span class="tag-chip green">Discovery</span>
+              </div>
+              <div class="table-row">
+                <span>00:08:31</span>
+                <span>File Access</span>
+                <span>System</span>
+                <span>Opened backup zip</span>
+                <span>Success</span>
+                <span class="tag-chip orange">High-Risk</span>
+              </div>
+              <div class="table-row">
+                <span>00:12:43</span>
+                <span>Command</span>
+                <span>Terminal</span>
+                <span>wordlist attack</span>
+                <span>Failed</span>
+                <span class="tag-chip purple">Cracking</span>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="section metrics-strip">
+        <article>
+          <strong>Dockerized setup</strong>
+          <p>Run locally without manual Python or Node installs.</p>
+        </article>
+        <article>
+          <strong>Config-driven studies</strong>
+          <p>Adapt surveys, logs, codebooks, and mappings without rewriting the app.</p>
+        </article>
+        <article>
+          <strong>Local-first workflow</strong>
+          <p>Keep sensitive qualitative data on the research machine.</p>
+        </article>
+      </section>
+
+      <section class="section" id="features">
+        <div class="section-heading">
+          <p class="eyebrow">Features</p>
+          <h2>Built for multi-source qualitative review.</h2>
+          <p>
+            Annotation Workbench combines session video, logs, surveys, memos, timeline events,
+            and structured data exploration in one workflow.
+          </p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-card">
+            <h3>Session review workspace</h3>
+            <p>Watch screen recordings, navigate session evidence, and annotate moments on a shared timeline.</p>
+          </article>
+          <article class="feature-card">
+            <h3>Large-table data explorer</h3>
+            <p>Browse raw and normalized CSV data with filtering, sorting, and pagination for high-row-count logs.</p>
+          </article>
+          <article class="feature-card">
+            <h3>Structured qualitative coding</h3>
+            <p>Capture events, tags, notes, memos, and evidence in a format ready for later analysis.</p>
+          </article>
+          <article class="feature-card">
+            <h3>Portable study setup</h3>
+            <p>Use study-specific config templates while keeping sensitive assets and outputs local.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section section-soft" id="workflow">
+        <div class="section-heading">
+          <p class="eyebrow">Workflow</p>
+          <h2>From raw sessions to coded evidence</h2>
+        </div>
+        <div class="workflow-grid">
+          <article class="workflow-step">
+            <span class="step-number">01</span>
+            <h3>Mount a project</h3>
+            <p>Add recordings, logs, surveys, and config files into the local study folder.</p>
+          </article>
+          <article class="workflow-step">
+            <span class="step-number">02</span>
+            <h3>Run ingest</h3>
+            <p>Normalize the study into sessions, survey answers, log events, and canonical CSV outputs.</p>
+          </article>
+          <article class="workflow-step">
+            <span class="step-number">03</span>
+            <h3>Annotate moments</h3>
+            <p>Create coded events, attach notes, and build memos while reviewing participant sessions.</p>
+          </article>
+          <article class="workflow-step">
+            <span class="step-number">04</span>
+            <h3>Export and analyze</h3>
+            <p>Use CSV outputs for Python, R, spreadsheets, or qualitative synthesis workflows.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="run">
+        <div class="section-heading">
+          <p class="eyebrow">Run locally</p>
+          <h2>Simple Docker startup</h2>
+        </div>
+        <div class="run-grid">
+          <article class="run-card">
+            <h3>1. Clone the repository</h3>
+            <pre><code>git clone https://github.com/kl1d/annotation.git
+cd annotation</code></pre>
+          </article>
+          <article class="run-card">
+            <h3>2. Start the app</h3>
+            <pre><code>docker compose up --build</code></pre>
+          </article>
+          <article class="run-card">
+            <h3>3. Open the local workspace</h3>
+            <pre><code>Frontend: http://localhost:5173
+API:      http://localhost:8000/api</code></pre>
+          </article>
+        </div>
+      </section>
+
+      <section class="section section-soft" id="docs">
+        <div class="section-heading">
+          <p class="eyebrow">Docs</p>
+          <h2>Reusable app, study-specific setup</h2>
+        </div>
+        <div class="docs-layout">
+          <div class="docs-copy">
+            <p>
+              The application is open source and reusable across studies, while project config,
+              raw assets, and normalized outputs stay local to each research workflow.
+            </p>
+            <ul class="bullet-list">
+              <li><code>project/config/*.example.yaml</code> provides reusable templates</li>
+              <li>real local config files are copied from templates and ignored by Git</li>
+              <li><code>project/assets/</code> and <code>project/data/</code> remain local to the study machine</li>
+              <li>GitHub Pages hosts this landing/docs site, not the Docker app itself</li>
+            </ul>
+          </div>
+          <pre class="config-block"><code>project/
+  assets/
+    videos/
+    logs/
+    surveys/
+  config/
+    project.yaml
+    survey_mappings.yaml
+    log_mappings.yaml
+    annotation_schema.yaml
+    codebook.yaml
+  data/
+    sessions.csv
+    survey_answers.csv
+    log_events.csv
+    timeline_events.csv</code></pre>
+        </div>
+      </section>
+
+      <footer class="site-footer">
+        <span>Annotation Workbench</span>
+        <a href="https://kl1d.me" target="_blank" rel="noreferrer">kl1d.me</a>
+      </footer>
+    </div>
+  </body>
+  </html>

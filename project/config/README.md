@@ -1,27 +1,25 @@
-# Project Config Templates
+# Sample Project Config
 
-These files are tracked as reusable examples for new studies.
+This `project/` directory is the public sample project included with the repository.
 
-Use them like this:
+It contains generic configuration files that let the app start without exposing any real study data.
 
-1. Copy each `*.example.yaml` file to the same name without `.example`.
-2. Edit the real local files for your study setup.
-3. Keep the real study files local; they are ignored by Git.
+If you want to work with a private local study:
 
-Tracked here:
+1. Keep your real files in `project.local/`
+2. Run Docker with:
 
-- `annotation_schema.example.yaml`
-- `asset_mappings.example.yaml`
-- `codebook.example.yaml`
-- `log_mappings.example.yaml`
-- `project.example.yaml`
-- `survey_mappings.example.yaml`
+```bash
+PROJECT_DIR=project.local docker compose up --build
+```
 
-Local-only files the app reads at runtime:
+The files in this folder are safe-to-publish examples:
 
-- `annotation_schema.yaml`
-- `asset_mappings.yaml`
-- `codebook.yaml`
-- `log_mappings.yaml`
 - `project.yaml`
 - `survey_mappings.yaml`
+- `log_mappings.yaml`
+- `annotation_schema.yaml`
+- `codebook.yaml`
+- `asset_mappings.yaml`
+
+The `.example.yaml` versions are reusable templates for creating new projects from scratch.

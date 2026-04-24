@@ -10,18 +10,7 @@ tags:
     color: "#E5532D"
     description: Visible uncertainty or misunderstanding
   - tag_id: T003
-    name: design_issue
-    category: design_validation
-    color: "#B42318"
-    description: Possible flaw or ambiguity in study design
-  - tag_id: T004
     name: pivot
     category: session_process
     color: "#6F42C1"
     description: Participant changes direction or tactic
-  - tag_id: T005
-    name: success
-    category: session_process
-    color: "#1A7F37"
-    description: Meaningful progress or resolution
-
