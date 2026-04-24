@@ -13,11 +13,16 @@ const configOrder = [
 
 export default function SettingsPage() {
   const queryClient = useQueryClient();
+  const projectsQuery = useQuery({
+    queryKey: ["projects"],
+    queryFn: api.getProjects,
+  });
   const configFilesQuery = useQuery({
     queryKey: ["config-files"],
     queryFn: api.getConfigFiles,
   });
   const [selectedFile, setSelectedFile] = useState("project");
+  const [selectedProjectId, setSelectedProjectId] = useState("");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string>("");
 
@@ -48,6 +53,23 @@ export default function SettingsPage() {
     },
   });
 
+  const switchProjectMutation = useMutation({
+    mutationFn: api.setActiveProject,
+    onSuccess: async (selection) => {
+      setSelectedProjectId(selection.active_project);
+      setDrafts({});
+      setMessage(`Switched to ${selection.active_project}. Reloaded project config, sessions, and data views.`);
+      await queryClient.invalidateQueries({ queryKey: ["projects"] });
+      await queryClient.invalidateQueries({ queryKey: ["config"] });
+      await queryClient.invalidateQueries({ queryKey: ["config-files"] });
+      await queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      await queryClient.invalidateQueries({ queryKey: ["data-files"] });
+    },
+    onError: (error) => {
+      setMessage(error instanceof Error ? error.message : "Failed to switch project.");
+    },
+  });
+
   useEffect(() => {
     if (!configFilesQuery.data) {
       return;
@@ -62,6 +84,13 @@ export default function SettingsPage() {
       return next;
     });
   }, [configFilesQuery.data]);
+
+  useEffect(() => {
+    if (!projectsQuery.data) {
+      return;
+    }
+    setSelectedProjectId((current) => current || projectsQuery.data.active_project);
+  }, [projectsQuery.data]);
 
   const configFiles = useMemo(() => {
     const source = configFilesQuery.data ?? [];
@@ -100,6 +129,48 @@ export default function SettingsPage() {
       </header>
 
       {message ? <div className="callout">{message}</div> : null}
+
+      <section className="panel project-switcher-panel">
+        <div className="section-header">
+          <div>
+            <h3>Active project folder</h3>
+            <p className="muted small">
+              Switch between the mounted sample and your private local project without restarting Docker.
+            </p>
+          </div>
+          <span className="pill subtle">{projectsQuery.data?.active_project ?? "Loading..."}</span>
+        </div>
+        <div className="project-switcher-row">
+          <label className="project-switcher-field">
+            <span className="muted small">Mounted project</span>
+            <select
+              onChange={(event) => {
+                setSelectedProjectId(event.target.value);
+                setMessage("");
+              }}
+              value={selectedProjectId}
+            >
+              {(projectsQuery.data?.available_projects ?? []).map((project) => (
+                <option key={project.project_id} value={project.project_id}>
+                  {project.label} ({project.path})
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="primary-button"
+            disabled={
+              switchProjectMutation.isPending ||
+              !selectedProjectId ||
+              selectedProjectId === projectsQuery.data?.active_project
+            }
+            onClick={() => switchProjectMutation.mutate(selectedProjectId)}
+            type="button"
+          >
+            {switchProjectMutation.isPending ? "Switching..." : "Switch project"}
+          </button>
+        </div>
+      </section>
 
       <div className="settings-layout">
         <aside className="panel settings-list">

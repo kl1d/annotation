@@ -34,6 +34,20 @@ Backend API: `http://localhost:8000/api`
 - `project.local/`: your real local study project data and config
 - `docs/`: static GitHub Pages landing site for public documentation and project overview
 
+## Built With
+
+- [Docker](https://www.docker.com/) and Docker Compose for portable local setup
+- [FastAPI](https://fastapi.tiangolo.com/) for the backend API
+- [Pydantic](https://docs.pydantic.dev/) for request/response validation
+- [PyYAML](https://pyyaml.org/) for project configuration files
+- [React](https://react.dev/) for the frontend UI
+- [Vite](https://vite.dev/) for frontend development and builds
+- [TypeScript](https://www.typescriptlang.org/) for typed frontend code
+- [TanStack Query](https://tanstack.com/query/latest) for frontend data fetching and cache invalidation
+- [React Router](https://reactrouter.com/) for app routing
+- [AG Grid Community](https://www.ag-grid.com/react-data-grid/) for the Data page spreadsheet viewer
+- CSV files and the local filesystem as the transparent project data layer
+
 ## Study-specific files
 
 The real files in `project.local/` are intended to stay local for each study.
@@ -43,6 +57,8 @@ The real files in `project.local/` are intended to stay local for each study.
 
 The public repo includes a generic sample `project/` that is safe to publish. Your real study data
 can stay in `project.local/`, and Docker can target it with `PROJECT_DIR=project.local`.
+
+When both folders are present, you can also switch between them from the app’s `Settings` page.
 
 ## Public Docs
 

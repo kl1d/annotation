@@ -9,6 +9,22 @@ class ProjectSummary(BaseModel):
     paths: dict[str, str]
 
 
+class ProjectTarget(BaseModel):
+    project_id: str
+    label: str
+    path: str
+    active: bool = False
+
+
+class ProjectSelection(BaseModel):
+    active_project: str
+    available_projects: list[ProjectTarget]
+
+
+class ProjectSelectionUpdate(BaseModel):
+    project_id: str
+
+
 class ConfigFile(BaseModel):
     name: str
     path: str

@@ -4,12 +4,13 @@ services:
       context: ./backend
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     environment:
-      PROJECT_ROOT: /project
+      WORKSPACE_ROOT: /workspace
+      PROJECT_DIR: ${PROJECT_DIR:-project}
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
-      - ./${PROJECT_DIR:-project}:/project
+      - .:/workspace
 
   frontend:
     build:

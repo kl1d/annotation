@@ -8,6 +8,7 @@ dist/
 coverage/
 *.tsbuildinfo
 codex_*.md
+.annotation-workbench.local.json
 project.local/
 project/assets/*
 !project/assets/README.md

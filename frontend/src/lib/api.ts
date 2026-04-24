@@ -118,6 +118,18 @@ export type ProjectConfig = {
   paths: Record<string, string>;
 };
 
+export type ProjectTarget = {
+  project_id: string;
+  label: string;
+  path: string;
+  active: boolean;
+};
+
+export type ProjectSelection = {
+  active_project: string;
+  available_projects: ProjectTarget[];
+};
+
 export type ConfigFile = {
   name: string;
   path: string;
@@ -151,6 +163,12 @@ export type SessionCsvPreview = {
 };
 
 export const api = {
+  getProjects: () => request<ProjectSelection>("/projects"),
+  setActiveProject: (projectId: string) =>
+    request<ProjectSelection>("/projects/active", {
+      method: "PUT",
+      body: JSON.stringify({ project_id: projectId }),
+    }),
   getConfig: () => request<ProjectConfig>("/config"),
   getConfigFiles: () => request<ConfigFile[]>("/config/files"),
   getDataFiles: () => request<SessionCsvFile[]>("/data/files"),
@@ -172,6 +190,11 @@ export const api = {
   createEvent: (sessionId: string, payload: Record<string, unknown>) =>
     request<TimelineEvent>(`/sessions/${sessionId}/events`, {
       method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateEvent: (eventId: string, payload: Record<string, unknown>) =>
+    request<TimelineEvent>(`/events/${eventId}`, {
+      method: "PATCH",
       body: JSON.stringify(payload),
     }),
   deleteEvent: (eventId: string) =>

@@ -202,21 +202,22 @@ class ProjectService:
 
         results: list[SessionSummary] = []
         for row in sessions:
+            session_id = row.get("session_id", "")
             video_path = row.get("video_path", "")
             results.append(
                 SessionSummary(
-                    session_id=row.get("session_id", ""),
+                    session_id=session_id,
                     participant_id=row.get("participant_id", ""),
                     status=row.get("status", "active"),
                     video_path=video_path,
-                    video_url=self.asset_url(video_path),
+                    video_url=self.session_video_url(session_id, video_path),
                     log_path=row.get("log_path", ""),
                     pre_survey_path=row.get("pre_survey_path", ""),
                     progression_survey_path=row.get("progression_survey_path", ""),
                     post_survey_path=row.get("post_survey_path", ""),
-                    annotation_count=counts_by_session.get(row.get("session_id", ""), 0),
-                    starred_count=starred_by_session.get(row.get("session_id", ""), 0),
-                    last_updated=last_updated_by_session.get(row.get("session_id", "")),
+                    annotation_count=counts_by_session.get(session_id, 0),
+                    starred_count=starred_by_session.get(session_id, 0),
+                    last_updated=last_updated_by_session.get(session_id, ""),
                 )
             )
         return sorted(results, key=lambda session: session.participant_id)
@@ -581,12 +582,17 @@ class ProjectService:
             rows = [row for row in rows if row.get("event_type") == "design_issue"]
         return rows_to_csv(fieldnames, rows)
 
-    def asset_url(self, relative_path: str) -> str | None:
-        if not relative_path:
+    def session_video_url(self, session_id: str, relative_path: str) -> str | None:
+        if not session_id or not relative_path:
             return None
-        if relative_path.startswith("assets/"):
-            return "/project-assets/" + relative_path.removeprefix("assets/")
-        return None
+        candidate = (self.project_root / relative_path).resolve()
+        try:
+            candidate.relative_to(self.project_root.resolve())
+        except ValueError:
+            return None
+        if not candidate.exists() or not candidate.is_file():
+            return None
+        return f"/api/sessions/{session_id}/video"
 
     def _set_event_tags(self, event_id: str, tag_ids: list[str]) -> None:
         rows = self.repo.read_rows("event_tags.csv", EVENT_TAG_FIELDS)

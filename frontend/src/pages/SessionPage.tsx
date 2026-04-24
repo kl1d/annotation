@@ -36,7 +36,6 @@ const initialDraft: EventDraft = {
 };
 
 type CanvasTab = "video" | "logs" | "surveys" | "notes";
-type WorkbenchTab = "event" | "memo" | "notes";
 
 const EVENT_TYPE_OPTIONS = [
   "choice",
@@ -51,9 +50,6 @@ const EVENT_TYPE_OPTIONS = [
   "design_issue",
   "other",
 ];
-
-const SOURCE_OPTIONS = ["video", "log", "survey", "mixed"];
-const CONFIDENCE_OPTIONS = ["low", "medium", "high"];
 
 const TASK_PATH_OPTIONS = [
   { value: "", label: "No task path" },
@@ -79,24 +75,6 @@ const OBSERVATION_OPTIONS = [
   "High confidence",
 ];
 
-const INTERPRETATION_OPTIONS = [
-  "Strategy shift",
-  "Learning moment",
-  "Hypothesis testing",
-  "Possible misunderstanding",
-  "Potential design issue",
-  "Successful inference",
-  "Needs closer review",
-];
-
-const FOLLOW_UP_OPTIONS = [
-  "Check logs",
-  "Check survey",
-  "Compare earlier moment",
-  "Add to memo",
-  "Use as example",
-];
-
 export default function SessionPage() {
   const { sessionId = "" } = useParams();
   const queryClient = useQueryClient();
@@ -109,7 +87,6 @@ export default function SessionPage() {
   const [memoBody, setMemoBody] = useState("");
   const [workspaceNotes, setWorkspaceNotes] = useState("");
   const [canvasTab, setCanvasTab] = useState<CanvasTab>("video");
-  const [workbenchTab, setWorkbenchTab] = useState<WorkbenchTab>("event");
   const [selectedLogFile, setSelectedLogFile] = useState("all");
   const [startTimeInput, setStartTimeInput] = useState("00:00");
   const [endTimeInput, setEndTimeInput] = useState("");
@@ -117,6 +94,7 @@ export default function SessionPage() {
   const [videoDuration, setVideoDuration] = useState(0);
   const [selectedTimelineEventId, setSelectedTimelineEventId] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const savedVideoTimeRef = useRef(0);
 
   const sessionQuery = useQuery({
     queryKey: ["session", sessionId],
@@ -143,6 +121,16 @@ export default function SessionPage() {
     },
   });
 
+  const updateEventMutation = useMutation({
+    mutationFn: ({ eventId, payload }: { eventId: string; payload: EventDraft }) =>
+      api.updateEvent(eventId, payload),
+    onSuccess: async () => {
+      setTimeError("");
+      await queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
+      await queryClient.invalidateQueries({ queryKey: ["sessions"] });
+    },
+  });
+
   const saveMemoMutation = useMutation({
     mutationFn: (body: string) =>
       api.saveMemo(sessionId, {
@@ -158,6 +146,7 @@ export default function SessionPage() {
   const deleteEventMutation = useMutation({
     mutationFn: (eventId: string) => api.deleteEvent(eventId),
     onSuccess: async () => {
+      clearEventDraft();
       await queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
       await queryClient.invalidateQueries({ queryKey: ["sessions"] });
     },
@@ -228,28 +217,27 @@ export default function SessionPage() {
     return Math.max(videoDuration, eventMax, draft.start_time_sec, 1);
   }, [draft.start_time_sec, timelineEvents, videoDuration]);
 
-  function handleSubmit(event: FormEvent) {
-    event.preventDefault();
+  function buildEventPayload(): EventDraft | null {
     const startTime = parseTimeInput(startTimeInput);
     const endTime = parseTimeInput(endTimeInput);
 
     if (startTime === null) {
       setTimeError("Start time must use mm:ss, for example 05:27 or 36:58.");
-      return;
+      return null;
     }
 
     if (endTimeInput.trim() && endTime === null) {
       setTimeError("End time must use mm:ss when provided.");
-      return;
+      return null;
     }
 
     if (endTime !== null && endTime < startTime) {
       setTimeError("End time must be the same as or after the start time.");
-      return;
+      return null;
     }
 
     setTimeError("");
-    createEventMutation.mutate({
+    return {
       ...draft,
       start_time_sec: startTime,
       end_time_sec: endTime ?? undefined,
@@ -258,7 +246,34 @@ export default function SessionPage() {
       observation: mergeStructuredText(observationChoices, draft.observation),
       interpretation: mergeStructuredText(interpretationChoices, draft.interpretation),
       follow_up: mergeStructuredText(followUpChoices, draft.follow_up),
-    });
+    };
+  }
+
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    const payload = buildEventPayload();
+    if (!payload) {
+      return;
+    }
+
+    if (selectedTimelineEventId) {
+      updateEventMutation.mutate({ eventId: selectedTimelineEventId, payload });
+      return;
+    }
+
+    createEventMutation.mutate(payload);
+  }
+
+  function clearEventDraft() {
+    setDraft(initialDraft);
+    setTaskPreset("");
+    setObservationChoices([]);
+    setInterpretationChoices([]);
+    setFollowUpChoices([]);
+    setStartTimeInput("00:00");
+    setEndTimeInput("");
+    setTimeError("");
+    setSelectedTimelineEventId(null);
   }
 
   function updateStartTimeInput(value: string) {
@@ -282,11 +297,14 @@ export default function SessionPage() {
 
   function jumpVideo(seconds: number) {
     const video = videoRef.current;
+    savedVideoTimeRef.current = seconds;
     if (!video) {
+      setVideoCurrentTime(Math.max(0, seconds));
       return;
     }
     const nextTime = Math.max(0, Math.min(video.duration || Infinity, seconds));
     video.currentTime = nextTime;
+    savedVideoTimeRef.current = nextTime;
     setVideoCurrentTime(nextTime);
   }
 
@@ -302,17 +320,48 @@ export default function SessionPage() {
   function jumpToTimelineEvent(item: TimelineEvent) {
     const startTime = Number(item.start_time_sec || 0);
     setSelectedTimelineEventId(item.event_id);
-    setWorkbenchTab("event");
+    setDraft({
+      start_time_sec: startTime,
+      end_time_sec: item.end_time_sec ? Number(item.end_time_sec) : undefined,
+      source_type: item.source_type || "video",
+      task_path: item.task_path || "",
+      event_type: item.event_type || "other",
+      title: item.title || "",
+      observation: item.observation || "",
+      interpretation: item.interpretation || "",
+      evidence_note: item.evidence_note || "",
+      confidence: item.confidence || "medium",
+      follow_up: item.follow_up || "",
+      starred: item.starred === "true",
+      tag_ids: item.tag_ids ?? [],
+    });
+    if (TASK_PATH_OPTIONS.some((option) => option.value === item.task_path)) {
+      setTaskPreset(item.task_path || "");
+    } else if (item.task_path) {
+      setTaskPreset("other");
+    } else {
+      setTaskPreset("");
+    }
+    setObservationChoices([]);
+    setInterpretationChoices([]);
+    setFollowUpChoices([]);
     updateStartTimeInput(formatTimeInput(startTime));
     updateEndTimeInput(item.end_time_sec ? formatTimeInput(Number(item.end_time_sec)) : "");
     jumpVideo(startTime);
   }
 
-  function scrubTimeline(event: MouseEvent<HTMLDivElement>) {
+  function timeFromTimelinePointer(event: MouseEvent<HTMLDivElement>) {
     const bounds = event.currentTarget.getBoundingClientRect();
     const relativeX = event.clientX - bounds.left;
     const percent = Math.min(1, Math.max(0, relativeX / bounds.width));
-    jumpVideo(percent * timelineMaxSec);
+    return percent * timelineMaxSec;
+  }
+
+  function createDraftFromTimeline(event: MouseEvent<HTMLDivElement>) {
+    const selectedTime = timeFromTimelinePointer(event);
+    clearEventDraft();
+    updateStartTimeInput(formatTimeInput(selectedTime));
+    jumpVideo(selectedTime);
   }
 
   function toggleChoice(
@@ -389,11 +438,19 @@ export default function SessionPage() {
                     ref={videoRef}
                     src={`${API_BASE_URL}/sessions/${session.session_id}/video`}
                     onLoadedMetadata={(event) => {
-                      setVideoDuration(event.currentTarget.duration || 0);
-                      setVideoCurrentTime(event.currentTarget.currentTime || 0);
+                      const video = event.currentTarget;
+                      const duration = video.duration || 0;
+                      const restoredTime = Math.min(savedVideoTimeRef.current, duration || savedVideoTimeRef.current);
+                      setVideoDuration(duration);
+                      if (restoredTime > 0) {
+                        video.currentTime = restoredTime;
+                      }
+                      setVideoCurrentTime(restoredTime || video.currentTime || 0);
                     }}
                     onTimeUpdate={(event) => {
-                      setVideoCurrentTime(event.currentTarget.currentTime || 0);
+                      const currentTime = event.currentTarget.currentTime || 0;
+                      savedVideoTimeRef.current = currentTime;
+                      setVideoCurrentTime(currentTime);
                     }}
                   />
                   <div className="video-transport-bar">
@@ -500,22 +557,32 @@ export default function SessionPage() {
                 <article className="note-surface">
                   <div className="section-header">
                     <h4>Session memo</h4>
-                    <span className="pill subtle">saved</span>
                   </div>
-                  <div className="canvas-scroll prose-surface">
-                    {memoBody ? memoBody : "No memo yet. Use the workbench below to draft your running interpretation."}
-                  </div>
+                  <textarea
+                    className="memo-textarea note-inline-textarea"
+                    value={memoBody}
+                    onChange={(event) => setMemoBody(event.target.value)}
+                    placeholder="Summarize strategy, key moments, design observations, and paper-worthy examples."
+                  />
+                  <button
+                    className="primary-button"
+                    onClick={() => saveMemoMutation.mutate(memoBody)}
+                    type="button"
+                  >
+                    {saveMemoMutation.isPending ? "Saving..." : "Save memo"}
+                  </button>
                 </article>
                 <article className="note-surface">
                   <div className="section-header">
                     <h4>Workspace notes</h4>
                     <span className="pill subtle">local</span>
                   </div>
-                  <div className="canvas-scroll prose-surface">
-                    {workspaceNotes
-                      ? workspaceNotes
-                      : "No scratch notes yet. Use this area for transient comparisons, hypotheses, and reminders while coding."}
-                  </div>
+                  <textarea
+                    className="memo-textarea note-inline-textarea"
+                    value={workspaceNotes}
+                    onChange={(event) => setWorkspaceNotes(event.target.value)}
+                    placeholder="Capture quick thoughts, questions to revisit, and candidate annotations while reviewing."
+                  />
                 </article>
               </div>
             ) : null}
@@ -524,300 +591,202 @@ export default function SessionPage() {
 
         </div>
 
-        <div className="review-panel review-workbench-panel">
-          <div className="review-panel-header">
-            <div className="panel-tab-row">
-              {(["event", "memo", "notes"] as WorkbenchTab[]).map((tab) => (
+        <div className="review-panel review-workbench-panel event-inspector-panel">
+          <div className="event-inspector-header">
+            <div>
+              <h3>{selectedTimelineEventId ? "Edit event" : "New event"}</h3>
+              <span className="timeline-time-readout">
+                {startTimeInput}
+                {endTimeInput ? ` - ${endTimeInput}` : ""}
+              </span>
+            </div>
+            <div className="event-inspector-actions">
+              <button className="ghost-button" onClick={clearEventDraft} type="button">
+                Clear
+              </button>
+              {selectedTimelineEventId ? (
                 <button
-                  className={`panel-tab ${workbenchTab === tab ? "active" : ""}`}
-                  key={tab}
-                  onClick={() => setWorkbenchTab(tab)}
+                  className="ghost-button"
+                  disabled={deleteEventMutation.isPending}
+                  onClick={() => deleteEventMutation.mutate(selectedTimelineEventId)}
                   type="button"
                 >
-                  {labelForWorkbenchTab(tab)}
+                  Delete
                 </button>
-              ))}
+              ) : null}
             </div>
           </div>
 
-          <div className="workbench-content">
-            {workbenchTab === "event" ? (
-              <>
-                <div className="section-header">
-                  <h3>Create event</h3>
-                </div>
-                <form className="form-grid workbench-form" noValidate onSubmit={handleSubmit}>
-                  <label>
-                    Start time (mm:ss)
-                    <div className="input-with-action">
-                      <input
-                        aria-invalid={Boolean(timeError)}
-                        inputMode="numeric"
-                        placeholder="00:00"
-                        value={startTimeInput}
-                        onChange={(event) => updateStartTimeInput(event.target.value)}
-                      />
-                      <button
-                        aria-label="Use current video time for start time"
-                        className="icon-button"
-                        disabled={videoDuration <= 0}
-                        onClick={() => useCurrentVideoTimeFor("start")}
-                        type="button"
-                      >
-                        <TimeCaptureIcon />
-                      </button>
-                    </div>
-                  </label>
-                  <label>
-                    End time (mm:ss)
-                    <div className="input-with-action">
-                      <input
-                        aria-invalid={Boolean(timeError)}
-                        inputMode="numeric"
-                        placeholder="optional"
-                        value={endTimeInput}
-                        onChange={(event) => updateEndTimeInput(event.target.value)}
-                      />
-                      <button
-                        aria-label="Use current video time for end time"
-                        className="icon-button"
-                        disabled={videoDuration <= 0}
-                        onClick={() => useCurrentVideoTimeFor("end")}
-                        type="button"
-                      >
-                        <TimeCaptureIcon />
-                      </button>
-                    </div>
-                  </label>
-                  {timeError ? (
-                    <div className="form-error full-span" role="alert">
-                      {timeError}
-                    </div>
-                  ) : null}
-                  <label>
-                    Event type
-                    <select
-                      value={draft.event_type}
-                      onChange={(event) => setDraft({ ...draft, event_type: event.target.value })}
-                    >
-                      {EVENT_TYPE_OPTIONS.map((option) => (
-                        <option key={option} value={option}>
-                          {formatOptionLabel(option)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Task path
-                    <select
-                      value={taskPreset}
-                      onChange={(event) => {
-                        setTaskPreset(event.target.value);
-                        if (event.target.value !== "other") {
-                          setDraft((current) => ({ ...current, task_path: "" }));
-                        }
-                      }}
-                    >
-                      {TASK_PATH_OPTIONS.map((option) => (
-                        <option key={option.value || "blank"} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {taskPreset === "other" ? (
-                    <label className="full-span">
-                      Custom task path
-                      <input
-                        placeholder="Optional custom task path"
-                        value={draft.task_path}
-                        onChange={(event) => setDraft({ ...draft, task_path: event.target.value })}
-                      />
-                    </label>
-                  ) : null}
-                  <label className="full-span">
-                    Title override
-                    <input
-                      placeholder={generatedTitle}
-                      value={draft.title}
-                      onChange={(event) => setDraft({ ...draft, title: event.target.value })}
-                    />
-                  </label>
-                  <div className="form-section compact-section">
-                    <div className="section-header">
-                      <h4>Source</h4>
-                    </div>
-                    <div className="choice-chip-row">
-                      {SOURCE_OPTIONS.map((option) => (
-                        <button
-                          className={`choice-chip ${draft.source_type === option ? "active" : ""}`}
-                          key={option}
-                          onClick={() => setDraft({ ...draft, source_type: option })}
-                          type="button"
-                        >
-                          {formatOptionLabel(option)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="form-section compact-section">
-                    <div className="section-header">
-                      <h4>Confidence</h4>
-                    </div>
-                    <div className="choice-chip-row">
-                      {CONFIDENCE_OPTIONS.map((option) => (
-                        <button
-                          className={`choice-chip ${draft.confidence === option ? "active" : ""}`}
-                          key={option}
-                          onClick={() => setDraft({ ...draft, confidence: option })}
-                          type="button"
-                        >
-                          {formatOptionLabel(option)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="full-span form-section">
-                    <div className="section-header">
-                      <h4>Quick observations</h4>
-                    </div>
-                    <div className="choice-chip-grid">
-                      {OBSERVATION_OPTIONS.map((option) => (
-                        <button
-                          className={`choice-chip ${observationChoices.includes(option) ? "active" : ""}`}
-                          key={option}
-                          onClick={() => toggleChoice(option, setObservationChoices)}
-                          type="button"
-                        >
-                          {option}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <label className="full-span">
-                    Notes
-                    <textarea
-                      className="compact-notes"
-                      placeholder="Optional notes"
-                      value={draft.evidence_note}
-                      onChange={(event) => setDraft({ ...draft, evidence_note: event.target.value })}
-                    />
-                  </label>
-                  <div className="full-span form-section">
-                    <div className="section-header">
-                      <h4>Quick interpretations</h4>
-                    </div>
-                    <div className="choice-chip-grid">
-                      {INTERPRETATION_OPTIONS.map((option) => (
-                        <button
-                          className={`choice-chip ${interpretationChoices.includes(option) ? "active" : ""}`}
-                          key={option}
-                          onClick={() => toggleChoice(option, setInterpretationChoices)}
-                          type="button"
-                        >
-                          {option}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="full-span form-section">
-                    <div className="section-header">
-                      <h4>Tags</h4>
-                    </div>
-                    <div className="choice-chip-grid">
-                      {tagsQuery.data?.filter((tag) => tag.archived !== "true").map((tag) => (
-                        <button
-                          className={`choice-chip ${draft.tag_ids.includes(tag.tag_id) ? "active" : ""}`}
-                          key={tag.tag_id}
-                          onClick={() => toggleTag(tag.tag_id)}
-                          type="button"
-                        >
-                          {tag.category} / {tag.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="full-span form-section">
-                    <div className="section-header">
-                      <h4>Follow-up</h4>
-                    </div>
-                    <div className="choice-chip-grid">
-                      {FOLLOW_UP_OPTIONS.map((option) => (
-                        <button
-                          className={`choice-chip ${followUpChoices.includes(option) ? "active" : ""}`}
-                          key={option}
-                          onClick={() => toggleChoice(option, setFollowUpChoices)}
-                          type="button"
-                        >
-                          {option}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={draft.starred}
-                      onChange={(event) => setDraft({ ...draft, starred: event.target.checked })}
-                    />
-                    Starred moment
-                  </label>
-                  <button className="primary-button full-span" disabled={createEventMutation.isPending} type="submit">
-                    {createEventMutation.isPending ? "Saving..." : "Save event"}
+          <form className="event-inspector-form" noValidate onSubmit={handleSubmit}>
+            <div className="event-time-grid">
+              <label>
+                Start
+                <div className="input-with-action">
+                  <input
+                    aria-invalid={Boolean(timeError)}
+                    inputMode="numeric"
+                    placeholder="00:00"
+                    value={startTimeInput}
+                    onChange={(event) => updateStartTimeInput(event.target.value)}
+                  />
+                  <button
+                    aria-label="Use current video time for start time"
+                    className="icon-button"
+                    disabled={videoDuration <= 0}
+                    onClick={() => useCurrentVideoTimeFor("start")}
+                    type="button"
+                  >
+                    <TimeCaptureIcon />
                   </button>
-                </form>
-              </>
-            ) : null}
-
-            {workbenchTab === "memo" ? (
-              <div className="workbench-stack">
-                <div className="section-header">
-                  <div>
-                    <h3>Session memo</h3>
-                    <p className="muted small">Persistent session-level synthesis and interpretation.</p>
-                  </div>
                 </div>
-                <textarea
-                  className="memo-textarea workbench-textarea"
-                  value={memoBody}
-                  onChange={(event) => setMemoBody(event.target.value)}
-                  placeholder="Summarize strategy, key moments, design observations, and paper-worthy examples."
+              </label>
+              <label>
+                End
+                <div className="input-with-action">
+                  <input
+                    aria-invalid={Boolean(timeError)}
+                    inputMode="numeric"
+                    placeholder="optional"
+                    value={endTimeInput}
+                    onChange={(event) => updateEndTimeInput(event.target.value)}
+                  />
+                  <button
+                    aria-label="Use current video time for end time"
+                    className="icon-button"
+                    disabled={videoDuration <= 0}
+                    onClick={() => useCurrentVideoTimeFor("end")}
+                    type="button"
+                  >
+                    <TimeCaptureIcon />
+                  </button>
+                </div>
+              </label>
+            </div>
+            {timeError ? (
+              <div className="form-error" role="alert">
+                {timeError}
+              </div>
+            ) : null}
+            <label>
+              Event type
+              <select
+                value={draft.event_type}
+                onChange={(event) => setDraft({ ...draft, event_type: event.target.value })}
+              >
+                {EVENT_TYPE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {formatOptionLabel(option)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Task path
+              <select
+                value={taskPreset}
+                onChange={(event) => {
+                  setTaskPreset(event.target.value);
+                  if (event.target.value !== "other") {
+                    setDraft((current) => ({ ...current, task_path: "" }));
+                  }
+                }}
+              >
+                {TASK_PATH_OPTIONS.map((option) => (
+                  <option key={option.value || "blank"} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {taskPreset === "other" ? (
+              <label>
+                Custom task
+                <input
+                  placeholder="Optional"
+                  value={draft.task_path}
+                  onChange={(event) => setDraft({ ...draft, task_path: event.target.value })}
                 />
+              </label>
+            ) : null}
+            <label>
+              Title
+              <input
+                placeholder={generatedTitle}
+                value={draft.title}
+                onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+              />
+            </label>
+            <label>
+              Notes
+              <textarea
+                className="compact-notes"
+                placeholder="Optional notes"
+                value={draft.evidence_note}
+                onChange={(event) => setDraft({ ...draft, evidence_note: event.target.value })}
+              />
+            </label>
+            <div className="choice-chip-grid compact-chip-grid">
+              {OBSERVATION_OPTIONS.map((option) => (
                 <button
-                  className="primary-button"
-                  onClick={() => saveMemoMutation.mutate(memoBody)}
+                  className={`choice-chip ${observationChoices.includes(option) ? "active" : ""}`}
+                  key={option}
+                  onClick={() => toggleChoice(option, setObservationChoices)}
                   type="button"
                 >
-                  {saveMemoMutation.isPending ? "Saving..." : "Save memo"}
+                  {option}
                 </button>
-              </div>
-            ) : null}
-
-            {workbenchTab === "notes" ? (
-              <div className="workbench-stack">
-                <div className="section-header">
-                  <div>
-                    <h3>Workspace notes</h3>
-                    <p className="muted small">Local scratchpad for quick hypotheses and temporary notes.</p>
-                  </div>
-                  <span className="pill subtle">auto-saved in browser</span>
-                </div>
-                <textarea
-                  className="memo-textarea workbench-textarea"
-                  value={workspaceNotes}
-                  onChange={(event) => setWorkspaceNotes(event.target.value)}
-                  placeholder="Capture quick thoughts, questions to revisit, and candidate annotations while reviewing."
+              ))}
+            </div>
+            <div className="choice-chip-grid compact-chip-grid">
+              {tagsQuery.data?.filter((tag) => tag.archived !== "true").map((tag) => (
+                <button
+                  className={`choice-chip ${draft.tag_ids.includes(tag.tag_id) ? "active" : ""}`}
+                  key={tag.tag_id}
+                  onClick={() => toggleTag(tag.tag_id)}
+                  type="button"
+                >
+                  {tag.category} / {tag.name}
+                </button>
+              ))}
+            </div>
+            <div className="event-inspector-footer">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={draft.starred}
+                  onChange={(event) => setDraft({ ...draft, starred: event.target.checked })}
                 />
-              </div>
-            ) : null}
-          </div>
+                Starred
+              </label>
+              <button
+                className="primary-button"
+                disabled={createEventMutation.isPending || updateEventMutation.isPending}
+                type="submit"
+              >
+                {selectedTimelineEventId
+                  ? updateEventMutation.isPending
+                    ? "Updating..."
+                    : "Update"
+                  : createEventMutation.isPending
+                    ? "Saving..."
+                    : "Save"}
+              </button>
+            </div>
+          </form>
         </div>
       </div>
 
       <div className="review-panel timeline-editor-panel">
         <div className="timeline-editor-header">
-          <h3>Timeline</h3>
-          <span className="pill subtle">{timelineEvents.length} events</span>
+          <div>
+            <h3>Timeline editor</h3>
+            <span className="timeline-time-readout">
+              {formatSeconds(String(videoCurrentTime))} / {formatSeconds(String(timelineMaxSec))}
+            </span>
+          </div>
+          <div className="timeline-dock-actions">
+            <span className="pill subtle">{timelineEvents.length} events</span>
+          </div>
         </div>
 
         <div className="timeline-ruler">
@@ -835,7 +804,7 @@ export default function SessionPage() {
         <div className="timeline-track-shell">
           <div
             className="timeline-editor-track"
-            onClick={scrubTimeline}
+            onClick={createDraftFromTimeline}
             style={{
               height: `${Math.max(84, 36 + timelineLanes.length * 28)}px`,
             }}
@@ -924,13 +893,6 @@ export default function SessionPage() {
 }
 
 function labelForTab(tab: CanvasTab) {
-  return tab.charAt(0).toUpperCase() + tab.slice(1);
-}
-
-function labelForWorkbenchTab(tab: WorkbenchTab) {
-  if (tab === "event") {
-    return "Create Event";
-  }
   return tab.charAt(0).toUpperCase() + tab.slice(1);
 }
 

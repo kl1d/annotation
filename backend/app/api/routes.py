@@ -11,6 +11,8 @@ from app.models.schemas import (
     EventUpdate,
     IngestResult,
     MemoUpdate,
+    ProjectSelection,
+    ProjectSelectionUpdate,
     ProjectSummary,
     SessionCsvFile,
     SessionCsvPreview,
@@ -19,91 +21,108 @@ from app.models.schemas import (
     TagCreate,
     TagUpdate,
 )
+from app.services.project_manager import ProjectManager
 from app.services.project_service import ProjectService
 
 
-def build_router(project_service: ProjectService) -> APIRouter:
+def build_router(project_manager: ProjectManager) -> APIRouter:
     router = APIRouter(prefix="/api")
+
+    def current_service() -> ProjectService:
+        return project_manager.get_service()
 
     @router.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @router.get("/projects", response_model=ProjectSelection)
+    def projects() -> ProjectSelection:
+        return ProjectSelection(**project_manager.list_projects())
+
+    @router.put("/projects/active", response_model=ProjectSelection)
+    def set_active_project(payload: ProjectSelectionUpdate) -> ProjectSelection:
+        try:
+            return ProjectSelection(**project_manager.set_active_project(payload.project_id))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @router.get("/config", response_model=ProjectSummary)
     def config() -> ProjectSummary:
-        return project_service.project_summary()
+        return current_service().project_summary()
 
     @router.get("/config/files", response_model=list[ConfigFile])
     def config_files() -> list[ConfigFile]:
-        return [ConfigFile(**item) for item in project_service.list_config_files()]
+        return [ConfigFile(**item) for item in current_service().list_config_files()]
 
     @router.get("/data/files", response_model=list[SessionCsvFile])
     def data_files() -> list[SessionCsvFile]:
-        return [SessionCsvFile(**item) for item in project_service.list_project_csv_files()]
+        return [SessionCsvFile(**item) for item in current_service().list_project_csv_files()]
 
     @router.get("/data/files/{file_id}", response_model=SessionCsvPreview)
     def data_file_preview(file_id: str) -> SessionCsvPreview:
         try:
-            return SessionCsvPreview(**project_service.get_project_csv_preview(file_id))
+            return SessionCsvPreview(**current_service().get_project_csv_preview(file_id))
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @router.get("/config/files/{name}", response_model=ConfigFile)
     def config_file(name: str) -> ConfigFile:
         try:
-            return ConfigFile(**project_service.get_config_file(name))
+            return ConfigFile(**current_service().get_config_file(name))
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @router.put("/config/files/{name}", response_model=ConfigFile)
     def update_config_file(name: str, payload: ConfigFileUpdate) -> ConfigFile:
         try:
-            return ConfigFile(**project_service.update_config_file(name, payload.content))
+            return ConfigFile(**current_service().update_config_file(name, payload.content))
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @router.get("/sessions", response_model=list[SessionSummary])
     def sessions() -> list[SessionSummary]:
-        return project_service.list_sessions()
+        return current_service().list_sessions()
 
     @router.post("/sessions/ingest", response_model=IngestResult)
     def ingest() -> IngestResult:
-        return IngestResult(**project_service.ingest())
+        return IngestResult(**current_service().ingest())
 
     @router.get("/sessions/{session_id}", response_model=SessionDetail)
     def session_detail(session_id: str) -> SessionDetail:
-        session = project_service.get_session(session_id)
+        service = current_service()
+        session = service.get_session(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         return SessionDetail(
             session=session,
-            events=project_service.list_events(session_id),
-            memo=project_service.get_memo(session_id),
-            logs=project_service.list_logs(session_id),
-            surveys=project_service.list_surveys(session_id),
+            events=service.list_events(session_id),
+            memo=service.get_memo(session_id),
+            logs=service.list_logs(session_id),
+            surveys=service.list_surveys(session_id),
         )
 
     @router.get("/sessions/{session_id}/csv-files", response_model=list[SessionCsvFile])
     def session_csv_files(session_id: str) -> list[SessionCsvFile]:
         try:
-            return [SessionCsvFile(**item) for item in project_service.list_session_csv_files(session_id)]
+            return [SessionCsvFile(**item) for item in current_service().list_session_csv_files(session_id)]
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @router.get("/sessions/{session_id}/csv-files/{file_id}", response_model=SessionCsvPreview)
     def session_csv_preview(session_id: str, file_id: str) -> SessionCsvPreview:
         try:
-            return SessionCsvPreview(**project_service.get_session_csv_preview(session_id, file_id))
+            return SessionCsvPreview(**current_service().get_session_csv_preview(session_id, file_id))
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @router.get("/sessions/{session_id}/video")
     def session_video(session_id: str, request: Request) -> Response:
-        session = project_service.get_session(session_id)
+        service = current_service()
+        session = service.get_session(session_id)
         if not session or not session.video_path:
             raise HTTPException(status_code=404, detail="Video not found")
-        video_path = (project_service.project_root / session.video_path).resolve()
-        project_root = project_service.project_root.resolve()
+        video_path = (service.project_root / session.video_path).resolve()
+        project_root = service.project_root.resolve()
         try:
             video_path.relative_to(project_root)
         except ValueError as exc:
@@ -137,68 +156,68 @@ def build_router(project_service: ProjectService) -> APIRouter:
 
     @router.get("/sessions/{session_id}/events")
     def session_events(session_id: str) -> list[dict]:
-        return project_service.list_events(session_id)
+        return current_service().list_events(session_id)
 
     @router.post("/sessions/{session_id}/events")
     def create_event(session_id: str, payload: EventCreate) -> dict:
         try:
-            return project_service.create_event(session_id, payload.model_dump())
+            return current_service().create_event(session_id, payload.model_dump())
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @router.patch("/events/{event_id}")
     def update_event(event_id: str, payload: EventUpdate) -> dict:
         try:
-            return project_service.update_event(event_id, payload.model_dump(exclude_unset=True))
+            return current_service().update_event(event_id, payload.model_dump(exclude_unset=True))
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @router.delete("/events/{event_id}", status_code=204)
     def delete_event(event_id: str) -> Response:
-        project_service.delete_event(event_id)
+        current_service().delete_event(event_id)
         return Response(status_code=204)
 
     @router.get("/tags")
     def tags() -> list[dict]:
-        return project_service.list_tags()
+        return current_service().list_tags()
 
     @router.post("/tags")
     def create_tag(payload: TagCreate) -> dict:
-        return project_service.create_tag(payload.model_dump())
+        return current_service().create_tag(payload.model_dump())
 
     @router.patch("/tags/{tag_id}")
     def update_tag(tag_id: str, payload: TagUpdate) -> dict:
         try:
-            return project_service.update_tag(tag_id, payload.model_dump(exclude_unset=True))
+            return current_service().update_tag(tag_id, payload.model_dump(exclude_unset=True))
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @router.get("/sessions/{session_id}/logs")
     def logs(session_id: str) -> list[dict]:
-        return project_service.list_logs(session_id)
+        return current_service().list_logs(session_id)
 
     @router.get("/sessions/{session_id}/surveys")
     def surveys(session_id: str) -> list[dict]:
-        return project_service.list_surveys(session_id)
+        return current_service().list_surveys(session_id)
 
     @router.get("/sessions/{session_id}/memo")
     def memo(session_id: str) -> dict:
         try:
-            return project_service.get_memo(session_id)
+            return current_service().get_memo(session_id)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @router.put("/sessions/{session_id}/memo")
     def update_memo(session_id: str, payload: MemoUpdate) -> dict:
         try:
-            return project_service.upsert_memo(session_id, payload.title, payload.body)
+            return current_service().upsert_memo(session_id, payload.title, payload.body)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @router.get("/export/{name}.csv")
     def export_csv(name: str) -> Response:
         try:
-            data = project_service.export_csv(name)
+            data = current_service().export_csv(name)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return Response(

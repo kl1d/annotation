@@ -84,6 +84,9 @@ export default function DataPage() {
       flex: 1,
       autoHeight: false,
       wrapText: true,
+      valueFormatter: isSecondsTimeColumn(column)
+        ? ({ value }) => formatSecondsForDataGrid(value)
+        : undefined,
     }));
   }, [previewQuery.data]);
 
@@ -353,4 +356,31 @@ function sortTreeNodes(nodes: ExplorerNode[]): ExplorerNode[] {
       }
       return left.name.localeCompare(right.name);
     });
+}
+
+function isSecondsTimeColumn(column: string) {
+  const normalized = column.toLowerCase();
+  return normalized.endsWith("_time_sec") || normalized === "timestamp_sec";
+}
+
+function formatSecondsForDataGrid(value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return "";
+  }
+
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds)) {
+    return String(value);
+  }
+
+  const total = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const remainingSeconds = (total % 60).toString().padStart(2, "0");
+
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, "0")}:${remainingSeconds}`;
+  }
+
+  return `${minutes}:${remainingSeconds}`;
 }
