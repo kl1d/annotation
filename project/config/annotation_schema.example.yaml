@@ -10,15 +10,6 @@ event_types:
   - success
   - design_issue
   - other
-source_types:
-  - video
-  - log
-  - survey
-  - mixed
-confidence_values:
-  - low
-  - medium
-  - high
 required_event_fields:
   - start_time_sec
   - event_type
@@ -26,8 +17,34 @@ required_event_fields:
 optional_event_fields:
   - end_time_sec
   - task_path
-  - observation
-  - interpretation
   - evidence_note
-  - follow_up
-  - starred
+  - tag_ids
+field_config:
+  start_time_sec:
+    label: Start
+    input: timecode
+  end_time_sec:
+    label: End
+    input: timecode
+  event_type:
+    label: Event type
+    input: select
+    options_from: event_types
+  task_path:
+    label: Task name
+    input: text
+    suggestions:
+      - A1
+      - A2
+      - B1
+      - B2
+      - B3
+  title:
+    label: Title
+    input: text
+  evidence_note:
+    label: Notes
+    input: textarea
+  tag_ids:
+    label: Tags
+    input: tags

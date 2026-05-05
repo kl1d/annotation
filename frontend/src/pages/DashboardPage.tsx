@@ -13,6 +13,8 @@ type SortKey =
 
 type SortDirection = "asc" | "desc";
 
+const SESSION_STATUS_OPTIONS = ["needs_review", "reviewed", "missing", "active", "skipped"];
+
 export default function DashboardPage() {
   const queryClient = useQueryClient();
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
@@ -39,6 +41,14 @@ export default function DashboardPage() {
       await queryClient.invalidateQueries({ queryKey: ["sessions"] });
     },
   });
+  const updateSessionMutation = useMutation({
+    mutationFn: ({ sessionId, status }: { sessionId: string; status: string }) =>
+      api.updateSession(sessionId, { status }),
+    onSuccess: async (session) => {
+      await queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      await queryClient.invalidateQueries({ queryKey: ["session", session.session_id] });
+    },
+  });
 
   useEffect(() => {
     const savedView = window.localStorage.getItem("dashboard-view");
@@ -52,7 +62,12 @@ export default function DashboardPage() {
   }, [viewMode]);
 
   const sessions = sessionsQuery.data ?? [];
-  const statusOptions = Array.from(new Set(sessions.map((session) => session.status))).sort();
+  const statusOptions = [
+    ...SESSION_STATUS_OPTIONS,
+    ...Array.from(new Set(sessions.map((session) => session.status).filter(Boolean)))
+      .filter((status) => !SESSION_STATUS_OPTIONS.includes(status))
+      .sort(),
+  ];
 
   const sortSessions = (items: typeof sessions) =>
     [...items].sort((left, right) => {
@@ -110,6 +125,10 @@ export default function DashboardPage() {
     return sortDirection === "asc" ? "↑" : "↓";
   };
 
+  const updateSessionStatus = (sessionId: string, status: string) => {
+    updateSessionMutation.mutate({ sessionId, status });
+  };
+
   return (
     <section className="page">
       <header className="page-header">
@@ -161,33 +180,51 @@ export default function DashboardPage() {
       {viewMode === "cards" ? (
         <div className="card-grid">
           {cardSessions.map((session) => (
-            <Link className="session-card" key={session.session_id} to={`/sessions/${session.session_id}`}>
+            <article className="session-card" key={session.session_id}>
               <div className="card-topline">
-                <span className="session-card-participant" title={session.participant_id}>
+                <Link
+                  className="session-card-participant"
+                  title={session.participant_id}
+                  to={`/sessions/${session.session_id}`}
+                >
                   {session.participant_id}
-                </span>
-                <span className="pill session-card-status">{session.status}</span>
+                </Link>
+                <select
+                  aria-label={`Set status for ${session.session_id}`}
+                  className={`status-select session-card-status ${statusToneClass(session.status)}`}
+                  disabled={updateSessionMutation.isPending}
+                  onChange={(event) => updateSessionStatus(session.session_id, event.target.value)}
+                  value={session.status}
+                >
+                  {statusOptions.map((status) => (
+                    <option key={status} value={status}>
+                      {formatStatusLabel(status)}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <h3 className="session-card-title" title={session.session_id}>
-                {session.session_id}
-              </h3>
-              <p
-                className="muted session-card-path"
-                title={session.video_path || "No video matched yet"}
-              >
-                {session.video_path || "No video matched yet"}
-              </p>
-              <dl className="stats-grid">
-                <div>
-                  <dt>Annotations</dt>
-                  <dd>{session.annotation_count}</dd>
-                </div>
-                <div>
-                  <dt>Starred</dt>
-                  <dd>{session.starred_count}</dd>
-                </div>
-              </dl>
-            </Link>
+              <Link className="session-card-body" to={`/sessions/${session.session_id}`}>
+                <h3 className="session-card-title" title={session.session_id}>
+                  {session.session_id}
+                </h3>
+                <p
+                  className="muted session-card-path"
+                  title={session.video_path || "No video matched yet"}
+                >
+                  {session.video_path || "No video matched yet"}
+                </p>
+                <dl className="stats-grid">
+                  <div>
+                    <dt>Annotations</dt>
+                    <dd>{session.annotation_count}</dd>
+                  </div>
+                  <div>
+                    <dt>Starred</dt>
+                    <dd>{session.starred_count}</dd>
+                  </div>
+                </dl>
+              </Link>
+            </article>
           ))}
         </div>
       ) : (
@@ -239,7 +276,7 @@ export default function DashboardPage() {
                       <option value="">All</option>
                       {statusOptions.map((status) => (
                         <option key={status} value={status}>
-                          {status}
+                          {formatStatusLabel(status)}
                         </option>
                       ))}
                     </select>
@@ -285,7 +322,19 @@ export default function DashboardPage() {
                   <td>{session.participant_id}</td>
                   <td>{session.session_id}</td>
                   <td>
-                    <span className="pill">{session.status}</span>
+                    <select
+                      aria-label={`Set status for ${session.session_id}`}
+                      className={`status-select table-status-select ${statusToneClass(session.status)}`}
+                      disabled={updateSessionMutation.isPending}
+                      onChange={(event) => updateSessionStatus(session.session_id, event.target.value)}
+                      value={session.status}
+                    >
+                      {statusOptions.map((status) => (
+                        <option key={status} value={status}>
+                          {formatStatusLabel(status)}
+                        </option>
+                      ))}
+                    </select>
                   </td>
                   <td className="dashboard-table-path">
                     {session.video_path || "No video matched yet"}
@@ -316,4 +365,16 @@ export default function DashboardPage() {
       ) : null}
     </section>
   );
+}
+
+function formatStatusLabel(status: string) {
+  return status
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function statusToneClass(status: string) {
+  const normalized = status.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  return normalized ? `status-${normalized}` : "status-unknown";
 }

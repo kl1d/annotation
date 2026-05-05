@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type Dispatch, FormEvent, type MouseEvent, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, type MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { api, API_BASE_URL, TimelineEvent } from "../lib/api";
+import { api, API_BASE_URL, type AnnotationSchemaField, TimelineEvent } from "../lib/api";
 
 type EventDraft = {
   start_time_sec: number;
@@ -51,38 +51,30 @@ const EVENT_TYPE_OPTIONS = [
   "other",
 ];
 
-const TASK_PATH_OPTIONS = [
-  { value: "", label: "No task path" },
-  { value: "setup", label: "Setup" },
-  { value: "orientation", label: "Orientation" },
-  { value: "recon", label: "Recon" },
-  { value: "analysis", label: "Analysis" },
-  { value: "attempt", label: "Attempt" },
-  { value: "debug", label: "Debug" },
-  { value: "pivot", label: "Pivot" },
-  { value: "reflection", label: "Reflection" },
-  { value: "other", label: "Other / custom" },
+const TASK_NAME_OPTIONS = [
+  "A1",
+  "A2",
+  "B1",
+  "B2",
+  "B3",
 ];
 
-const OBSERVATION_OPTIONS = [
-  "Exploring a new path",
-  "Retrying",
-  "Blocked",
-  "Made progress",
-  "Confused",
-  "Interface friction",
-  "Using hints or cues",
-  "High confidence",
+const DEFAULT_EVENT_FORM_FIELDS: AnnotationSchemaField[] = [
+  { key: "start_time_sec", label: "Start", required: true, input: "timecode", options: [], suggestions: [] },
+  { key: "end_time_sec", label: "End", required: false, input: "timecode", options: [], suggestions: [] },
+  { key: "event_type", label: "Event type", required: true, input: "select", options: EVENT_TYPE_OPTIONS, suggestions: [] },
+  { key: "task_path", label: "Task name", required: false, input: "text", options: [], suggestions: TASK_NAME_OPTIONS },
+  { key: "title", label: "Title", required: true, input: "text", options: [], suggestions: [] },
+  { key: "evidence_note", label: "Notes", required: false, input: "textarea", options: [], suggestions: [] },
+  { key: "tag_ids", label: "Tags", required: false, input: "tags", options: [], suggestions: [] },
 ];
+
+const SUPPORTED_EVENT_FORM_FIELDS = new Set(DEFAULT_EVENT_FORM_FIELDS.map((field) => field.key));
 
 export default function SessionPage() {
   const { sessionId = "" } = useParams();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<EventDraft>(initialDraft);
-  const [taskPreset, setTaskPreset] = useState("");
-  const [observationChoices, setObservationChoices] = useState<string[]>([]);
-  const [interpretationChoices, setInterpretationChoices] = useState<string[]>([]);
-  const [followUpChoices, setFollowUpChoices] = useState<string[]>([]);
   const [timeError, setTimeError] = useState("");
   const [memoBody, setMemoBody] = useState("");
   const [workspaceNotes, setWorkspaceNotes] = useState("");
@@ -101,6 +93,10 @@ export default function SessionPage() {
     queryFn: () => api.getSession(sessionId),
     enabled: Boolean(sessionId),
   });
+  const annotationSchemaQuery = useQuery({
+    queryKey: ["annotation-schema"],
+    queryFn: api.getAnnotationSchema,
+  });
   const tagsQuery = useQuery({
     queryKey: ["tags"],
     queryFn: api.getTags,
@@ -108,14 +104,7 @@ export default function SessionPage() {
   const createEventMutation = useMutation({
     mutationFn: (payload: EventDraft) => api.createEvent(sessionId, payload),
     onSuccess: async () => {
-      setDraft(initialDraft);
-      setTaskPreset("");
-      setObservationChoices([]);
-      setInterpretationChoices([]);
-      setFollowUpChoices([]);
-      setStartTimeInput("00:00");
-      setEndTimeInput("");
-      setTimeError("");
+      clearEventDraft();
       await queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
       await queryClient.invalidateQueries({ queryKey: ["sessions"] });
     },
@@ -125,7 +114,6 @@ export default function SessionPage() {
     mutationFn: ({ eventId, payload }: { eventId: string; payload: EventDraft }) =>
       api.updateEvent(eventId, payload),
     onSuccess: async () => {
-      setTimeError("");
       await queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
       await queryClient.invalidateQueries({ queryKey: ["sessions"] });
     },
@@ -201,12 +189,30 @@ export default function SessionPage() {
   }, [selectedLogFile, sessionQuery.data?.logs]);
 
   const generatedTitle = useMemo(
-    () => buildGeneratedTitle(draft.event_type, taskPreset, observationChoices),
-    [draft.event_type, taskPreset, observationChoices],
+    () => buildGeneratedTitle(draft.event_type, draft.task_path),
+    [draft.event_type, draft.task_path],
   );
+  const eventFormFields = useMemo(() => {
+    const configuredFields = (annotationSchemaQuery.data?.fields ?? []).filter((field) =>
+      SUPPORTED_EVENT_FORM_FIELDS.has(field.key),
+    );
+    return configuredFields.length ? configuredFields : DEFAULT_EVENT_FORM_FIELDS;
+  }, [annotationSchemaQuery.data?.fields]);
+  const eventFieldMap = useMemo(
+    () => Object.fromEntries(eventFormFields.map((field) => [field.key, field])),
+    [eventFormFields],
+  );
+  const eventTypeOptions = eventFieldMap.event_type?.options.length
+    ? eventFieldMap.event_type.options
+    : EVENT_TYPE_OPTIONS;
+  const taskNameSuggestions = eventFieldMap.task_path?.suggestions.length
+    ? eventFieldMap.task_path.suggestions
+    : TASK_NAME_OPTIONS;
+  const defaultEventType = eventTypeOptions[0] ?? "other";
 
   const timelineEvents = sessionQuery.data?.events ?? [];
   const timelineLanes = useMemo(() => buildTimelineLanes(timelineEvents), [timelineEvents]);
+  const eventAnchorTime = draft.start_time_sec || videoCurrentTime;
   const timelineMaxSec = useMemo(() => {
     const eventMax = timelineEvents.reduce((max, item) => {
       const endTime = Number(item.end_time_sec || item.start_time_sec || 0);
@@ -214,8 +220,15 @@ export default function SessionPage() {
       return Math.max(max, startTime, endTime);
     }, 0);
 
-    return Math.max(videoDuration, eventMax, draft.start_time_sec, 1);
-  }, [draft.start_time_sec, timelineEvents, videoDuration]);
+    return Math.max(videoDuration, eventMax, eventAnchorTime, 1);
+  }, [eventAnchorTime, timelineEvents, videoDuration]);
+
+  useEffect(() => {
+    if (!eventTypeOptions.length || eventTypeOptions.includes(draft.event_type)) {
+      return;
+    }
+    setDraft((current) => ({ ...current, event_type: defaultEventType }));
+  }, [defaultEventType, draft.event_type, eventTypeOptions]);
 
   function buildEventPayload(): EventDraft | null {
     const startTime = parseTimeInput(startTimeInput);
@@ -241,11 +254,14 @@ export default function SessionPage() {
       ...draft,
       start_time_sec: startTime,
       end_time_sec: endTime ?? undefined,
-      task_path: taskPreset === "other" ? draft.task_path.trim() : taskPreset,
+      source_type: draft.source_type || "video",
+      task_path: draft.task_path.trim(),
       title: draft.title.trim() || generatedTitle,
-      observation: mergeStructuredText(observationChoices, draft.observation),
-      interpretation: mergeStructuredText(interpretationChoices, draft.interpretation),
-      follow_up: mergeStructuredText(followUpChoices, draft.follow_up),
+      observation: "",
+      interpretation: "",
+      follow_up: "",
+      confidence: "medium",
+      starred: false,
     };
   }
 
@@ -265,12 +281,13 @@ export default function SessionPage() {
   }
 
   function clearEventDraft() {
-    setDraft(initialDraft);
-    setTaskPreset("");
-    setObservationChoices([]);
-    setInterpretationChoices([]);
-    setFollowUpChoices([]);
-    setStartTimeInput("00:00");
+    const nextStart = Math.max(0, Math.floor(videoCurrentTime));
+    setDraft({
+      ...initialDraft,
+      event_type: defaultEventType,
+      start_time_sec: nextStart,
+    });
+    setStartTimeInput(formatTimeInput(nextStart));
     setEndTimeInput("");
     setTimeError("");
     setSelectedTimelineEventId(null);
@@ -335,18 +352,9 @@ export default function SessionPage() {
       starred: item.starred === "true",
       tag_ids: item.tag_ids ?? [],
     });
-    if (TASK_PATH_OPTIONS.some((option) => option.value === item.task_path)) {
-      setTaskPreset(item.task_path || "");
-    } else if (item.task_path) {
-      setTaskPreset("other");
-    } else {
-      setTaskPreset("");
-    }
-    setObservationChoices([]);
-    setInterpretationChoices([]);
-    setFollowUpChoices([]);
     updateStartTimeInput(formatTimeInput(startTime));
     updateEndTimeInput(item.end_time_sec ? formatTimeInput(Number(item.end_time_sec)) : "");
+    setTimeError("");
     jumpVideo(startTime);
   }
 
@@ -359,20 +367,17 @@ export default function SessionPage() {
 
   function createDraftFromTimeline(event: MouseEvent<HTMLDivElement>) {
     const selectedTime = timeFromTimelinePointer(event);
-    clearEventDraft();
-    updateStartTimeInput(formatTimeInput(selectedTime));
+    const roundedTime = Math.max(0, Math.floor(selectedTime));
+    setDraft({
+      ...initialDraft,
+      event_type: defaultEventType,
+      start_time_sec: roundedTime,
+    });
+    setStartTimeInput(formatTimeInput(roundedTime));
+    setEndTimeInput("");
+    setTimeError("");
+    setSelectedTimelineEventId(null);
     jumpVideo(selectedTime);
-  }
-
-  function toggleChoice(
-    value: string,
-    setter: Dispatch<SetStateAction<string[]>>,
-  ) {
-    setter((current) =>
-      current.includes(value)
-        ? current.filter((item) => item !== value)
-        : [...current, value],
-    );
   }
 
   function toggleTag(tagId: string) {
@@ -618,146 +623,154 @@ export default function SessionPage() {
           </div>
 
           <form className="event-inspector-form" noValidate onSubmit={handleSubmit}>
-            <div className="event-time-grid">
-              <label>
-                Start
-                <div className="input-with-action">
-                  <input
-                    aria-invalid={Boolean(timeError)}
-                    inputMode="numeric"
-                    placeholder="00:00"
-                    value={startTimeInput}
-                    onChange={(event) => updateStartTimeInput(event.target.value)}
-                  />
-                  <button
-                    aria-label="Use current video time for start time"
-                    className="icon-button"
-                    disabled={videoDuration <= 0}
-                    onClick={() => useCurrentVideoTimeFor("start")}
-                    type="button"
-                  >
-                    <TimeCaptureIcon />
-                  </button>
-                </div>
-              </label>
-              <label>
-                End
-                <div className="input-with-action">
-                  <input
-                    aria-invalid={Boolean(timeError)}
-                    inputMode="numeric"
-                    placeholder="optional"
-                    value={endTimeInput}
-                    onChange={(event) => updateEndTimeInput(event.target.value)}
-                  />
-                  <button
-                    aria-label="Use current video time for end time"
-                    className="icon-button"
-                    disabled={videoDuration <= 0}
-                    onClick={() => useCurrentVideoTimeFor("end")}
-                    type="button"
-                  >
-                    <TimeCaptureIcon />
-                  </button>
-                </div>
-              </label>
-            </div>
+            {eventFormFields.map((field) => {
+              if (field.key === "start_time_sec") {
+                return (
+                  <div className="event-time-grid" key={field.key}>
+                    <label>
+                      {field.label}
+                      <div className="input-with-action">
+                        <input
+                          aria-invalid={Boolean(timeError)}
+                          inputMode="numeric"
+                          placeholder="00:00"
+                          value={startTimeInput}
+                          onChange={(event) => updateStartTimeInput(event.target.value)}
+                        />
+                        <button
+                          aria-label={`Use current video time for ${field.label.toLowerCase()}`}
+                          className="icon-button"
+                          disabled={videoDuration <= 0}
+                          onClick={() => useCurrentVideoTimeFor("start")}
+                          type="button"
+                        >
+                          <TimeCaptureIcon />
+                        </button>
+                      </div>
+                    </label>
+                    {eventFieldMap.end_time_sec ? (
+                      <label>
+                        {eventFieldMap.end_time_sec.label}
+                        <div className="input-with-action">
+                          <input
+                            aria-invalid={Boolean(timeError)}
+                            inputMode="numeric"
+                            placeholder="Optional"
+                            value={endTimeInput}
+                            onChange={(event) => updateEndTimeInput(event.target.value)}
+                          />
+                          <button
+                            aria-label={`Use current video time for ${eventFieldMap.end_time_sec.label.toLowerCase()}`}
+                            className="icon-button"
+                            disabled={videoDuration <= 0}
+                            onClick={() => useCurrentVideoTimeFor("end")}
+                            type="button"
+                          >
+                            <TimeCaptureIcon />
+                          </button>
+                        </div>
+                      </label>
+                    ) : null}
+                  </div>
+                );
+              }
+
+              if (field.key === "end_time_sec") {
+                return null;
+              }
+
+              if (field.key === "event_type") {
+                return (
+                  <label key={field.key}>
+                    {field.label}
+                    <select
+                      value={draft.event_type}
+                      onChange={(event) => setDraft({ ...draft, event_type: event.target.value })}
+                    >
+                      {eventTypeOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {formatOptionLabel(option)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                );
+              }
+
+              if (field.key === "task_path") {
+                return (
+                  <label key={field.key}>
+                    {field.label}
+                    <input
+                      list="task-name-options"
+                      placeholder="Optional"
+                      value={draft.task_path}
+                      onChange={(event) => setDraft({ ...draft, task_path: event.target.value })}
+                    />
+                    <datalist id="task-name-options">
+                      {taskNameSuggestions.map((option) => (
+                        <option key={option} value={option} />
+                      ))}
+                    </datalist>
+                  </label>
+                );
+              }
+
+              if (field.key === "title") {
+                return (
+                  <label key={field.key}>
+                    {field.label}
+                    <input
+                      placeholder={generatedTitle}
+                      value={draft.title}
+                      onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+                    />
+                  </label>
+                );
+              }
+
+              if (field.key === "evidence_note") {
+                return (
+                  <label key={field.key}>
+                    {field.label}
+                    <textarea
+                      className="compact-notes"
+                      placeholder="Optional notes"
+                      value={draft.evidence_note}
+                      onChange={(event) => setDraft({ ...draft, evidence_note: event.target.value })}
+                    />
+                  </label>
+                );
+              }
+
+              if (field.key === "tag_ids") {
+                return (
+                  <label key={field.key}>
+                    {field.label}
+                    <div className="choice-chip-grid compact-chip-grid">
+                      {tagsQuery.data?.filter((tag) => tag.archived !== "true").map((tag) => (
+                        <button
+                          className={`choice-chip ${draft.tag_ids.includes(tag.tag_id) ? "active" : ""}`}
+                          key={tag.tag_id}
+                          onClick={() => toggleTag(tag.tag_id)}
+                          type="button"
+                        >
+                          {tag.category} / {tag.name}
+                        </button>
+                      ))}
+                    </div>
+                  </label>
+                );
+              }
+
+              return null;
+            })}
             {timeError ? (
               <div className="form-error" role="alert">
                 {timeError}
               </div>
             ) : null}
-            <label>
-              Event type
-              <select
-                value={draft.event_type}
-                onChange={(event) => setDraft({ ...draft, event_type: event.target.value })}
-              >
-                {EVENT_TYPE_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {formatOptionLabel(option)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Task path
-              <select
-                value={taskPreset}
-                onChange={(event) => {
-                  setTaskPreset(event.target.value);
-                  if (event.target.value !== "other") {
-                    setDraft((current) => ({ ...current, task_path: "" }));
-                  }
-                }}
-              >
-                {TASK_PATH_OPTIONS.map((option) => (
-                  <option key={option.value || "blank"} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {taskPreset === "other" ? (
-              <label>
-                Custom task
-                <input
-                  placeholder="Optional"
-                  value={draft.task_path}
-                  onChange={(event) => setDraft({ ...draft, task_path: event.target.value })}
-                />
-              </label>
-            ) : null}
-            <label>
-              Title
-              <input
-                placeholder={generatedTitle}
-                value={draft.title}
-                onChange={(event) => setDraft({ ...draft, title: event.target.value })}
-              />
-            </label>
-            <label>
-              Notes
-              <textarea
-                className="compact-notes"
-                placeholder="Optional notes"
-                value={draft.evidence_note}
-                onChange={(event) => setDraft({ ...draft, evidence_note: event.target.value })}
-              />
-            </label>
-            <div className="choice-chip-grid compact-chip-grid">
-              {OBSERVATION_OPTIONS.map((option) => (
-                <button
-                  className={`choice-chip ${observationChoices.includes(option) ? "active" : ""}`}
-                  key={option}
-                  onClick={() => toggleChoice(option, setObservationChoices)}
-                  type="button"
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
-            <div className="choice-chip-grid compact-chip-grid">
-              {tagsQuery.data?.filter((tag) => tag.archived !== "true").map((tag) => (
-                <button
-                  className={`choice-chip ${draft.tag_ids.includes(tag.tag_id) ? "active" : ""}`}
-                  key={tag.tag_id}
-                  onClick={() => toggleTag(tag.tag_id)}
-                  type="button"
-                >
-                  {tag.category} / {tag.name}
-                </button>
-              ))}
-            </div>
             <div className="event-inspector-footer">
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={draft.starred}
-                  onChange={(event) => setDraft({ ...draft, starred: event.target.checked })}
-                />
-                Starred
-              </label>
               <button
                 className="primary-button"
                 disabled={createEventMutation.isPending || updateEventMutation.isPending}
@@ -868,7 +881,7 @@ export default function SessionPage() {
                   <span className={`timeline-dot tone-${toneForEventType(item.event_type)}`} />
                   <span className="timeline-dock-item-copy">
                     <strong>{item.title || formatOptionLabel(item.event_type)}</strong>
-                    <span className="muted small">{item.observation || item.interpretation || item.event_type}</span>
+                    <span className="muted small">{item.task_path || formatOptionLabel(item.event_type)}</span>
                   </span>
                 </button>
                 <button
@@ -903,29 +916,14 @@ function formatOptionLabel(value: string) {
     .join(" ");
 }
 
-function buildGeneratedTitle(eventType: string, taskPreset: string, observationChoices: string[]) {
+function buildGeneratedTitle(eventType: string, taskName: string) {
   const parts = [formatOptionLabel(eventType)];
 
-  if (taskPreset && taskPreset !== "other") {
-    parts.push(formatOptionLabel(taskPreset));
-  }
-
-  if (observationChoices.length > 0) {
-    parts.push(observationChoices[0]);
+  if (taskName.trim()) {
+    parts.push(taskName.trim());
   }
 
   return parts.join(" • ");
-}
-
-function mergeStructuredText(choices: string[], freeText: string) {
-  const cleanedFreeText = freeText.trim();
-  const structuredText = choices.join("; ");
-
-  if (structuredText && cleanedFreeText) {
-    return `${structuredText}. ${cleanedFreeText}`;
-  }
-
-  return structuredText || cleanedFreeText;
 }
 
 function toTimelinePercent(value: number, max: number) {

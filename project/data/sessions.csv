@@ -1,2 +1,2 @@
 session_id,participant_id,video_path,log_path,pre_survey_path,progression_survey_path,post_survey_path,status,created_at
-S_participant01@example.org,participant01@example.org,assets/videos/session01.mp4,assets/logs/participant01,,,,active,2026-04-24T10:29:18+00:00
+S_participant01@example.org,participant01@example.org,assets/videos/session01.mp4,assets/logs/participant01,,,,needs_review,2026-04-24T10:29:18+00:00

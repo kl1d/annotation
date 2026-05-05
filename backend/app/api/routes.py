@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse, StreamingResponse
 
 from app.models.schemas import (
+    AnnotationSchema,
     ConfigFile,
     ConfigFileUpdate,
     EventCreate,
@@ -21,6 +22,7 @@ from app.models.schemas import (
     NotebookThemeUpdate,
     ProjectSelection,
     ProjectSelectionUpdate,
+    SessionUpdate,
     ProjectSummary,
     SessionCsvFile,
     SessionCsvPreview,
@@ -179,6 +181,10 @@ def build_router(project_manager: ProjectManager) -> APIRouter:
     def config_files() -> list[ConfigFile]:
         return [ConfigFile(**item) for item in current_service().list_config_files()]
 
+    @router.get("/annotation-schema", response_model=AnnotationSchema)
+    def annotation_schema() -> AnnotationSchema:
+        return AnnotationSchema(**current_service().get_annotation_schema())
+
     @router.get("/data/files", response_model=list[SessionCsvFile])
     def data_files() -> list[SessionCsvFile]:
         return [SessionCsvFile(**item) for item in current_service().list_project_csv_files()]
@@ -225,6 +231,13 @@ def build_router(project_manager: ProjectManager) -> APIRouter:
             logs=service.list_logs(session_id),
             surveys=service.list_surveys(session_id),
         )
+
+    @router.patch("/sessions/{session_id}", response_model=SessionSummary)
+    def update_session(session_id: str, payload: SessionUpdate) -> SessionSummary:
+        try:
+            return current_service().update_session(session_id, payload.model_dump(exclude_unset=True))
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @router.get("/sessions/{session_id}/csv-files", response_model=list[SessionCsvFile])
     def session_csv_files(session_id: str) -> list[SessionCsvFile]:
