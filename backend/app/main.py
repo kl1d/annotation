@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import build_router
+from app.services.ai_assistant import AiAssistantService
 from app.services.project_manager import ProjectManager
 
 workspace_root = Path(os.environ.get("WORKSPACE_ROOT", "/workspace")).resolve()
@@ -15,6 +16,7 @@ project_manager = ProjectManager(
     default_project_id=default_project_id,
     fallback_root=fallback_project_root,
 )
+ai_assistant = AiAssistantService(workspace_root=workspace_root)
 
 app = FastAPI(title="Annotation Workbench API")
 app.add_middleware(
@@ -24,4 +26,4 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.include_router(build_router(project_manager))
+app.include_router(build_router(project_manager, ai_assistant))

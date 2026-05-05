@@ -13,7 +13,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const message = await response.text();
-    throw new Error(message || `Request failed: ${response.status}`);
+    throw new Error(readErrorMessage(message) || `Request failed: ${response.status}`);
   }
 
   if (response.status === 204) {
@@ -21,6 +21,29 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return (await response.json()) as T;
+}
+
+function readErrorMessage(message: string) {
+  if (!message) {
+    return "";
+  }
+  try {
+    const parsed = JSON.parse(message);
+    if (typeof parsed.detail === "string") {
+      return parsed.detail;
+    }
+    if (Array.isArray(parsed.detail)) {
+      return parsed.detail
+        .map((item: unknown) =>
+          item && typeof item === "object" && "msg" in item ? String(item.msg) : String(item),
+        )
+        .filter(Boolean)
+        .join(", ");
+    }
+  } catch {
+    return message;
+  }
+  return message;
 }
 
 export type SessionSummary = {
@@ -174,6 +197,72 @@ export type NotebookConfig = {
   available_themes: string[];
 };
 
+export type AiProviderSummary = {
+  provider: string;
+  label: string;
+  requires_api_key: boolean;
+  supports_base_url: boolean;
+  local: boolean;
+};
+
+export type AiProviderConfigStatus = {
+  enabled: boolean;
+  configured: boolean;
+  provider: string;
+  provider_label: string;
+  model: string;
+  base_url: string;
+  api_key_configured: boolean;
+  temperature: number;
+  max_output_tokens: number;
+  source: string;
+  available_providers: AiProviderSummary[];
+  configuration_required: string[];
+};
+
+export type AiProviderConfigUpdate = {
+  enabled?: boolean;
+  provider?: string;
+  model?: string;
+  base_url?: string;
+  api_key?: string;
+  clear_api_key?: boolean;
+  temperature?: number;
+  max_output_tokens?: number;
+};
+
+export type AiProviderTestResult = {
+  ok: boolean;
+  status: string;
+  message: string;
+  config: AiProviderConfigStatus;
+};
+
+export type AiModelSummary = {
+  id: string;
+  label: string;
+  provider: string;
+};
+
+export type AiAssistantResponse = {
+  action: string;
+  provider: string;
+  model: string;
+  content: string;
+  suggestions: Record<string, unknown>;
+};
+
+export type AiChatMessage = {
+  role: "user" | "assistant" | "system";
+  content: string;
+};
+
+export type AiChatResponse = {
+  message: string;
+  provider: string;
+  model: string;
+};
+
 export type SessionCsvFile = {
   file_id: string;
   label: string;
@@ -207,6 +296,17 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ theme }),
     }),
+  getAiConfig: () => request<AiProviderConfigStatus>("/ai/config"),
+  saveAiConfig: (payload: AiProviderConfigUpdate) =>
+    request<AiProviderConfigStatus>("/ai/config", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  testAiConfig: () =>
+    request<AiProviderTestResult>("/ai/test", {
+      method: "POST",
+    }),
+  getAiModels: () => request<AiModelSummary[]>("/ai/models"),
   getConfigFiles: () => request<ConfigFile[]>("/config/files"),
   getDataFiles: () => request<SessionCsvFile[]>("/data/files"),
   getDataFilePreview: (fileId: string) =>
@@ -219,6 +319,21 @@ export const api = {
   getSessions: () => request<SessionSummary[]>("/sessions"),
   ingestSessions: () => request<IngestResult>("/sessions/ingest", { method: "POST" }),
   getSession: (sessionId: string) => request<SessionDetail>(`/sessions/${sessionId}`),
+  runSessionAssistant: (sessionId: string, payload: { action: string; prompt?: string }) =>
+    request<AiAssistantResponse>(`/sessions/${sessionId}/ai/assist`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  runSessionAiChat: (
+    sessionId: string,
+    payload: { messages: AiChatMessage[]; action?: string; context_mode?: string },
+    signal?: AbortSignal,
+  ) =>
+    request<AiChatResponse>(`/sessions/${sessionId}/ai/chat`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+      signal,
+    }),
   updateSession: (sessionId: string, payload: Pick<SessionSummary, "status">) =>
     request<SessionSummary>(`/sessions/${sessionId}`, {
       method: "PATCH",

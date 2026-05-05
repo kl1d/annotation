@@ -1,6 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { api, type AnnotationSchema, type AnnotationSchemaField, ConfigFile } from "../lib/api";
+import {
+  api,
+  type AiProviderConfigStatus,
+  type AnnotationSchema,
+  type AnnotationSchemaField,
+  ConfigFile,
+} from "../lib/api";
 
 const configOrder = [
   "project",
@@ -80,6 +86,30 @@ const annotationSchemaFieldDefaults: Record<(typeof annotationSchemaFieldOrder)[
   },
 };
 
+type AiConfigDraft = {
+  enabled: boolean;
+  provider: string;
+  model: string;
+  base_url: string;
+  api_key: string;
+  clear_api_key: boolean;
+  temperature: string;
+  max_output_tokens: string;
+};
+
+type SettingsTab = "project" | "ai" | "config";
+
+const defaultAiConfigDraft: AiConfigDraft = {
+  enabled: false,
+  provider: "",
+  model: "",
+  base_url: "",
+  api_key: "",
+  clear_api_key: false,
+  temperature: "0.2",
+  max_output_tokens: "1200",
+};
+
 export default function SettingsPage() {
   const queryClient = useQueryClient();
   const projectsQuery = useQuery({
@@ -94,10 +124,16 @@ export default function SettingsPage() {
     queryKey: ["annotation-schema"],
     queryFn: api.getAnnotationSchema,
   });
+  const aiConfigQuery = useQuery({
+    queryKey: ["ai-config"],
+    queryFn: api.getAiConfig,
+  });
   const [selectedFile, setSelectedFile] = useState("project");
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [annotationSchemaDraft, setAnnotationSchemaDraft] = useState<AnnotationSchema | null>(null);
+  const [aiConfigDraft, setAiConfigDraft] = useState<AiConfigDraft>(defaultAiConfigDraft);
+  const [activeTab, setActiveTab] = useState<SettingsTab>("project");
   const [message, setMessage] = useState<string>("");
 
   const saveMutation = useMutation({
@@ -150,6 +186,37 @@ export default function SettingsPage() {
     },
   });
 
+  const saveAiConfigMutation = useMutation({
+    mutationFn: () => api.saveAiConfig(buildAiConfigPayload(aiConfigDraft)),
+    onSuccess: async (config) => {
+      setAiConfigDraft(draftFromAiConfig(config));
+      setMessage(
+        config.enabled
+          ? `Saved AI Assistant settings for ${config.provider_label || config.provider}.`
+          : "Saved AI Assistant settings. AI remains disabled.",
+      );
+      await queryClient.invalidateQueries({ queryKey: ["ai-config"] });
+    },
+    onError: (error) => {
+      setMessage(error instanceof Error ? error.message : "Failed to save AI Assistant settings.");
+    },
+  });
+
+  const testAiConfigMutation = useMutation({
+    mutationFn: async () => {
+      await api.saveAiConfig(buildAiConfigPayload(aiConfigDraft));
+      return api.testAiConfig();
+    },
+    onSuccess: async (result) => {
+      setMessage(result.message);
+      setAiConfigDraft(draftFromAiConfig(result.config));
+      await queryClient.invalidateQueries({ queryKey: ["ai-config"] });
+    },
+    onError: (error) => {
+      setMessage(error instanceof Error ? error.message : "Failed to test AI Assistant settings.");
+    },
+  });
+
   useEffect(() => {
     if (!configFilesQuery.data) {
       return;
@@ -184,6 +251,13 @@ export default function SettingsPage() {
     }));
   }, [annotationSchemaDraft, annotationSchemaQuery.data]);
 
+  useEffect(() => {
+    if (!aiConfigQuery.data) {
+      return;
+    }
+    setAiConfigDraft(draftFromAiConfig(aiConfigQuery.data));
+  }, [aiConfigQuery.data]);
+
   const configFiles = useMemo(() => {
     const source = configFilesQuery.data ?? [];
     return [...source].sort(
@@ -199,6 +273,71 @@ export default function SettingsPage() {
     : annotationSchemaQuery.data
       ? normalizeEditableAnnotationSchema(annotationSchemaQuery.data)
       : null;
+  const selectedAiProvider = aiConfigQuery.data?.available_providers.find(
+    (provider) => provider.provider === aiConfigDraft.provider,
+  );
+  const aiConfig = aiConfigQuery.data;
+  const savedAiProviderId = aiConfig?.provider || "";
+  const draftUsesSavedKey = Boolean(
+    selectedAiProvider?.requires_api_key &&
+      aiConfigDraft.provider === savedAiProviderId &&
+      aiConfig?.api_key_configured &&
+      !aiConfigDraft.clear_api_key,
+  );
+  const draftApiKeyConfigured = Boolean(aiConfigDraft.api_key.trim() || draftUsesSavedKey);
+  const aiConfigMissing = [
+    ...(!aiConfigDraft.provider ? ["provider"] : []),
+    ...(aiConfigDraft.provider && !aiConfigDraft.model.trim() ? ["model"] : []),
+    ...(selectedAiProvider?.requires_api_key && !draftApiKeyConfigured ? ["api_key"] : []),
+    ...(selectedAiProvider?.provider === "openai_compatible" && !aiConfigDraft.base_url.trim() ? ["base_url"] : []),
+  ];
+  const aiDraftReady = Boolean(aiConfigDraft.enabled && selectedAiProvider && aiConfigMissing.length === 0);
+  const aiSavedActive = Boolean(aiConfig?.enabled && aiConfig?.configured);
+  const aiProviderRows = useMemo(() => {
+    const providers = aiConfig?.available_providers ?? [];
+    const visibleProviderIds = new Set([savedAiProviderId, aiConfigDraft.provider].filter(Boolean));
+    return providers.filter((provider) => visibleProviderIds.has(provider.provider)).map((provider) => {
+      const isSavedProvider = Boolean(savedAiProviderId) && provider.provider === savedAiProviderId;
+      const isSelectedProvider = Boolean(aiConfigDraft.provider) && provider.provider === aiConfigDraft.provider;
+      const model = isSelectedProvider ? aiConfigDraft.model.trim() : aiConfig?.model || "";
+      const baseUrl = isSelectedProvider ? aiConfigDraft.base_url.trim() : aiConfig?.base_url || "";
+      const apiKeyConfigured = isSelectedProvider
+        ? draftApiKeyConfigured
+        : Boolean(isSavedProvider && aiConfig?.api_key_configured);
+      const missing = [
+        ...(!model ? ["model"] : []),
+        ...(provider.requires_api_key && !apiKeyConfigured ? ["api_key"] : []),
+        ...(provider.provider === "openai_compatible" && !baseUrl ? ["base_url"] : []),
+      ];
+      const hasMinimumConfig =
+        Boolean(model) &&
+        (!provider.requires_api_key || apiKeyConfigured) &&
+        (provider.provider !== "openai_compatible" || Boolean(baseUrl));
+      const isInUse = Boolean(aiConfig?.enabled && aiConfig?.configured && isSavedProvider);
+      const status = isInUse
+        ? "Active"
+        : hasMinimumConfig
+          ? isSavedProvider
+            ? aiConfig?.enabled
+              ? "Saved"
+              : "Configured"
+            : "Ready to save"
+          : isSelectedProvider || isSavedProvider
+            ? "Needs setup"
+            : "Not configured";
+
+      return {
+        ...provider,
+        isSavedProvider,
+        isSelectedProvider,
+        isInUse,
+        missing,
+        hasMinimumConfig,
+        model,
+        status,
+      };
+    });
+  }, [aiConfig, aiConfigDraft, draftApiKeyConfigured, savedAiProviderId]);
 
   function handleReload(file: ConfigFile) {
     setDrafts((current) => ({ ...current, [file.name]: file.content }));
@@ -225,28 +364,48 @@ export default function SettingsPage() {
     });
   }
 
+  function updateAiConfigDraft(patch: Partial<AiConfigDraft>) {
+    setAiConfigDraft((current) => ({ ...current, ...patch }));
+    setMessage("");
+  }
+
   return (
     <section className="page">
       <header className="page-header">
         <div>
           <p className="eyebrow">Settings</p>
-          <h2>Project config editor</h2>
+          <h2>Workbench settings</h2>
           <p className="muted">
-            Edit the mounted YAML config files here, save them back to disk, then re-run ingest when mappings change.
+            Manage the active study folder, AI provider, and project configuration.
           </p>
         </div>
-        <button
-          className="primary-button"
-          disabled={ingestMutation.isPending}
-          onClick={() => ingestMutation.mutate()}
-          type="button"
-        >
-          {ingestMutation.isPending ? "Re-ingesting..." : "Run ingest"}
-        </button>
       </header>
 
       {message ? <div className="callout">{message}</div> : null}
 
+      <div className="settings-tab-row" role="tablist" aria-label="Settings sections">
+        {[
+          { id: "project", label: "Project" },
+          { id: "ai", label: "AI Assistant" },
+          { id: "config", label: "Config files" },
+        ].map((tab) => (
+          <button
+            aria-selected={activeTab === tab.id}
+            className={`settings-tab ${activeTab === tab.id ? "active" : ""}`}
+            key={tab.id}
+            onClick={() => {
+              setActiveTab(tab.id as SettingsTab);
+              setMessage("");
+            }}
+            role="tab"
+            type="button"
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "project" ? (
       <section className="panel project-switcher-panel">
         <div className="section-header">
           <div>
@@ -255,7 +414,7 @@ export default function SettingsPage() {
               Switch between the mounted sample and your private local project without restarting Docker.
             </p>
           </div>
-          <span className="pill subtle">{projectsQuery.data?.active_project ?? "Loading..."}</span>
+          <span className="settings-status-badge">{projectsQuery.data?.active_project ?? "Loading..."}</span>
         </div>
         <div className="project-switcher-row">
           <label className="project-switcher-field">
@@ -288,7 +447,247 @@ export default function SettingsPage() {
           </button>
         </div>
       </section>
+      ) : null}
 
+      {activeTab === "ai" ? (
+      <section className="panel ai-settings-panel">
+        <div className="section-header">
+          <div>
+            <h3>AI Assistant</h3>
+            <p className="muted small">
+              {aiSavedActive
+                ? `Ready with ${aiConfig?.provider_label || aiConfig?.provider}.`
+                : aiDraftReady
+                  ? "Ready to save and test."
+                  : aiConfigDraft.enabled
+                  ? "Configuration is incomplete."
+                  : "Disabled until a provider is configured."}
+            </p>
+          </div>
+          <div className="ai-settings-header-actions">
+            <span className={`ai-status-badge ${aiSavedActive || aiDraftReady ? "ready" : aiConfigDraft.enabled ? "warning" : ""}`}>
+              {aiSavedActive ? "Configured" : aiDraftReady ? "Ready to save" : aiConfigDraft.enabled ? "Needs setup" : "Disabled"}
+            </span>
+            <label className="switch-field">
+              <span>Enable</span>
+              <input
+                checked={aiConfigDraft.enabled}
+                onChange={(event) => updateAiConfigDraft({ enabled: event.target.checked })}
+                type="checkbox"
+              />
+              <span className="switch-track" aria-hidden="true">
+                <span className="switch-thumb" />
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <div className="ai-settings-grid">
+          <label>
+            <span className="muted small">Provider</span>
+            <select
+              onChange={(event) => {
+                const provider = event.target.value;
+                const providerMeta = aiConfigQuery.data?.available_providers.find((item) => item.provider === provider);
+                updateAiConfigDraft({
+                  provider,
+                  base_url: providerMeta?.supports_base_url
+                    ? provider === "ollama" && !aiConfigDraft.base_url
+                      ? "http://host.docker.internal:11434"
+                      : aiConfigDraft.base_url
+                    : "",
+                  api_key: "",
+                  clear_api_key: false,
+                });
+              }}
+              value={aiConfigDraft.provider}
+            >
+              <option value="">Select provider</option>
+              {(aiConfigQuery.data?.available_providers ?? []).map((provider) => (
+                <option key={provider.provider} value={provider.provider}>
+                  {provider.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            <span className="muted small">Model</span>
+            <input
+              onChange={(event) => updateAiConfigDraft({ model: event.target.value })}
+              placeholder={aiConfigDraft.provider === "ollama" ? "llama3.1" : "model name"}
+              value={aiConfigDraft.model}
+            />
+          </label>
+
+          <label>
+            <span className="muted small">Base URL</span>
+            <input
+              disabled={!selectedAiProvider?.supports_base_url}
+              onChange={(event) => updateAiConfigDraft({ base_url: event.target.value })}
+              placeholder={selectedAiProvider?.supports_base_url ? "http://localhost:11434" : "Provider default"}
+              value={aiConfigDraft.base_url}
+            />
+          </label>
+
+          <label>
+            <span className="muted small">API key</span>
+            <input
+              autoComplete="off"
+              disabled={!selectedAiProvider?.requires_api_key}
+              onChange={(event) => updateAiConfigDraft({ api_key: event.target.value, clear_api_key: false })}
+              placeholder={
+                selectedAiProvider?.requires_api_key
+                  ? aiConfig?.api_key_configured
+                    ? "Saved key is set"
+                    : "Paste key"
+                  : "No key required"
+              }
+              type="password"
+              value={aiConfigDraft.api_key}
+            />
+          </label>
+
+          <label>
+            <span className="muted small">Temperature</span>
+            <input
+              inputMode="decimal"
+              onChange={(event) => updateAiConfigDraft({ temperature: event.target.value })}
+              value={aiConfigDraft.temperature}
+            />
+          </label>
+
+          <label>
+            <span className="muted small">Max output tokens</span>
+            <input
+              inputMode="numeric"
+              onChange={(event) => updateAiConfigDraft({ max_output_tokens: event.target.value })}
+              value={aiConfigDraft.max_output_tokens}
+            />
+          </label>
+        </div>
+
+        <div className="ai-settings-footer">
+          <div className="ai-settings-status">
+            {aiConfigMissing.length ? (
+              <span className="muted small">Missing: {aiConfigMissing.join(", ")}</span>
+            ) : (
+              <span className="muted small">
+                {selectedAiProvider?.local
+                  ? "Local provider"
+                  : selectedAiProvider
+                    ? "Remote provider: selected session context may leave this machine."
+                    : "Provider not selected"}
+              </span>
+            )}
+            {aiConfig?.api_key_configured && selectedAiProvider?.requires_api_key ? (
+              <label className="checkbox-label">
+                <input
+                  checked={aiConfigDraft.clear_api_key}
+                  onChange={(event) =>
+                    updateAiConfigDraft({
+                      clear_api_key: event.target.checked,
+                      api_key: event.target.checked ? "" : aiConfigDraft.api_key,
+                    })
+                  }
+                  type="checkbox"
+                />
+                <span>Clear saved key</span>
+              </label>
+            ) : null}
+          </div>
+
+          <div className="action-row">
+            <button
+              className="ghost-button"
+              disabled={testAiConfigMutation.isPending}
+              onClick={() => testAiConfigMutation.mutate()}
+              type="button"
+            >
+              {testAiConfigMutation.isPending ? "Testing..." : "Save and test"}
+            </button>
+            <button
+              className="primary-button"
+              disabled={saveAiConfigMutation.isPending}
+              onClick={() => saveAiConfigMutation.mutate()}
+              type="button"
+            >
+              {saveAiConfigMutation.isPending ? "Saving..." : "Save AI settings"}
+            </button>
+          </div>
+        </div>
+
+        <div className="ai-provider-list" aria-label="AI providers">
+          <div className="ai-provider-list-header">
+            <div>
+              <h4>Provider status</h4>
+              <p className="muted small">Configured provider and active runtime for this workbench.</p>
+            </div>
+            <span className="muted small">{aiConfig?.source === "environment" ? "Environment" : "Local file"}</span>
+          </div>
+
+          <div className="ai-provider-rows">
+            {aiProviderRows.map((provider) => (
+              <div className={`ai-provider-row ${provider.isInUse ? "active" : ""}`} key={provider.provider}>
+                <div className="ai-provider-row-main">
+                  <div>
+                    <strong>{provider.label}</strong>
+                    <p className="muted small">
+                  {provider.local ? "Local model host" : "Remote API"}
+                      {provider.model ? ` · ${provider.model}` : ""}
+                    </p>
+                  </div>
+                  <div className="ai-provider-badges">
+                    {provider.isSelectedProvider && !provider.isSavedProvider ? (
+                      <span className="ai-provider-badge selected">Selected</span>
+                    ) : null}
+                    {provider.isSavedProvider ? (
+                      <span className="ai-provider-badge configured">
+                        {provider.hasMinimumConfig ? "Configured" : "Added"}
+                      </span>
+                    ) : null}
+                    {provider.isInUse ? <span className="ai-provider-badge active">In use</span> : null}
+                    <span className={`ai-provider-badge ${provider.status === "Needs setup" ? "warning" : provider.status === "Ready to save" ? "selected" : ""}`}>
+                      {provider.status}
+                    </span>
+                  </div>
+                </div>
+                <div className="ai-provider-row-meta">
+                  <span>{provider.requires_api_key ? "API key required" : "No API key required"}</span>
+                  <span>{provider.supports_base_url ? "Custom base URL" : "Provider default URL"}</span>
+                  {provider.missing.length ? <span>Missing {provider.missing.join(", ")}</span> : null}
+                </div>
+              </div>
+            ))}
+            {!aiProviderRows.length ? (
+              <div className="ai-provider-empty">
+                <strong>No provider added yet.</strong>
+                <span className="muted small">Choose a provider above, add its model and credentials, then save.</span>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </section>
+      ) : null}
+
+      {activeTab === "config" ? (
+      <>
+      <section className="panel settings-config-toolbar">
+        <div>
+          <h3>Config files</h3>
+          <p className="muted small">
+            Edit mounted YAML files and re-run ingest when mappings or schema settings change.
+          </p>
+        </div>
+        <button
+          className="primary-button"
+          disabled={ingestMutation.isPending}
+          onClick={() => ingestMutation.mutate()}
+          type="button"
+        >
+          {ingestMutation.isPending ? "Re-ingesting..." : "Run ingest"}
+        </button>
+      </section>
       <div className="settings-layout">
         <aside className="panel settings-list">
           <h3>Config files</h3>
@@ -471,6 +870,8 @@ export default function SettingsPage() {
           )}
         </section>
       </div>
+      </>
+      ) : null}
     </section>
   );
 }
@@ -616,4 +1017,36 @@ function serializeYamlList(values: string[]) {
 
 function quoteYamlString(value: string) {
   return JSON.stringify(value);
+}
+
+function draftFromAiConfig(config: AiProviderConfigStatus): AiConfigDraft {
+  return {
+    enabled: config.enabled,
+    provider: config.provider,
+    model: config.model,
+    base_url: config.base_url,
+    api_key: "",
+    clear_api_key: false,
+    temperature: String(config.temperature),
+    max_output_tokens: String(config.max_output_tokens),
+  };
+}
+
+function buildAiConfigPayload(draft: AiConfigDraft) {
+  const apiKey = draft.api_key.trim();
+  return {
+    enabled: draft.enabled,
+    provider: draft.provider.trim(),
+    model: draft.model.trim(),
+    base_url: draft.base_url.trim(),
+    ...(apiKey ? { api_key: apiKey } : {}),
+    clear_api_key: draft.clear_api_key,
+    temperature: parseNumberOrDefault(draft.temperature, 0.2),
+    max_output_tokens: Math.round(parseNumberOrDefault(draft.max_output_tokens, 1200)),
+  };
+}
+
+function parseNumberOrDefault(value: string, fallback: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
