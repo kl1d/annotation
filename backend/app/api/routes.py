@@ -1,5 +1,11 @@
+import json
+import os
 from pathlib import Path
 from typing import Iterator
+from urllib.error import URLError
+from urllib.parse import quote
+from urllib.request import Request as UrlRequest
+from urllib.request import urlopen
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse, StreamingResponse
@@ -11,6 +17,8 @@ from app.models.schemas import (
     EventUpdate,
     IngestResult,
     MemoUpdate,
+    NotebookConfig,
+    NotebookThemeUpdate,
     ProjectSelection,
     ProjectSelectionUpdate,
     ProjectSummary,
@@ -24,12 +32,83 @@ from app.models.schemas import (
 from app.services.project_manager import ProjectManager
 from app.services.project_service import ProjectService
 
+NOTEBOOK_THEMES = ["JupyterLab Dark", "JupyterLab Light"]
+THEMES_SETTING_ID = "@jupyterlab/apputils-extension:themes"
+
 
 def build_router(project_manager: ProjectManager) -> APIRouter:
     router = APIRouter(prefix="/api")
 
     def current_service() -> ProjectService:
         return project_manager.get_service()
+
+    def notebook_settings_url() -> str:
+        notebook_internal_url = os.environ.get("JUPYTER_INTERNAL_URL", "http://notebooks:8888").rstrip("/")
+        if notebook_internal_url.endswith("/lab"):
+            notebook_internal_url = notebook_internal_url.removesuffix("/lab")
+        notebook_token = os.environ.get("JUPYTER_TOKEN", "")
+        url = f"{notebook_internal_url}/lab/api/settings/{THEMES_SETTING_ID}"
+        return f"{url}?token={quote(notebook_token)}" if notebook_token else url
+
+    def notebook_host_header() -> str:
+        return os.environ.get("JUPYTER_INTERNAL_HOST_HEADER", "localhost:8888")
+
+    def get_notebook_theme() -> str:
+        try:
+            request = UrlRequest(
+                notebook_settings_url(),
+                headers={"Host": notebook_host_header()},
+            )
+            with urlopen(request, timeout=2) as response:
+                data = json.loads(response.read().decode("utf-8"))
+        except (OSError, URLError, json.JSONDecodeError):
+            return os.environ.get("JUPYTER_DEFAULT_THEME", "JupyterLab Dark")
+
+        theme = data.get("settings", {}).get("theme")
+        return theme if theme in NOTEBOOK_THEMES else os.environ.get("JUPYTER_DEFAULT_THEME", "JupyterLab Dark")
+
+    def notebook_service_available() -> bool:
+        try:
+            request = UrlRequest(
+                notebook_settings_url(),
+                headers={"Host": notebook_host_header()},
+            )
+            with urlopen(request, timeout=2) as response:
+                return 200 <= response.status < 300
+        except (OSError, URLError):
+            return False
+
+    def set_notebook_theme(theme: str) -> None:
+        if theme not in NOTEBOOK_THEMES:
+            raise HTTPException(status_code=400, detail="Unsupported notebook theme")
+
+        payload = json.dumps(
+            {
+                "raw": json.dumps(
+                    {
+                        "theme": theme,
+                        "theme-scrollbars": True,
+                    }
+                )
+            }
+        ).encode("utf-8")
+        request = UrlRequest(
+            notebook_settings_url(),
+            data=payload,
+            method="PUT",
+            headers={
+                "Content-Type": "application/json",
+                "Host": notebook_host_header(),
+            },
+        )
+        try:
+            with urlopen(request, timeout=3):
+                return
+        except (OSError, URLError) as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Notebook service is not available for theme updates",
+            ) from exc
 
     @router.get("/health")
     def health() -> dict[str, str]:
@@ -49,6 +128,52 @@ def build_router(project_manager: ProjectManager) -> APIRouter:
     @router.get("/config", response_model=ProjectSummary)
     def config() -> ProjectSummary:
         return current_service().project_summary()
+
+    @router.get("/notebooks/config", response_model=NotebookConfig)
+    def notebook_config() -> NotebookConfig:
+        notebook_url = os.environ.get("JUPYTER_URL", "http://localhost:8888/lab").rstrip("/")
+        notebook_token = os.environ.get("JUPYTER_TOKEN", "")
+        active_project = project_manager.active_project_id
+        project_lab_url = f"{notebook_url}/tree/{quote(active_project)}"
+        notebooks_enabled = os.environ.get("NOTEBOOKS_ENABLED", "true").lower() not in {
+            "0",
+            "false",
+            "no",
+        }
+        separator = "&" if "?" in project_lab_url else "?"
+        launch_url = (
+            f"{project_lab_url}{separator}token={quote(notebook_token)}"
+            if notebook_token
+            else project_lab_url
+        )
+        available = notebooks_enabled and notebook_service_available()
+
+        return NotebookConfig(
+            enabled=notebooks_enabled,
+            available=available,
+            url=notebook_url,
+            launch_url=launch_url,
+            token_required=bool(notebook_token),
+            active_project=active_project,
+            workspace_path=f"/workspace/{active_project}",
+            status_message=(
+                "Notebook service is ready."
+                if available
+                else "JupyterLab is optional and is not running right now."
+            ),
+            start_command="docker compose --profile notebooks up -d notebooks",
+            theme=(
+                get_notebook_theme()
+                if available
+                else os.environ.get("JUPYTER_DEFAULT_THEME", "JupyterLab Dark")
+            ),
+            available_themes=NOTEBOOK_THEMES,
+        )
+
+    @router.put("/notebooks/theme", response_model=NotebookConfig)
+    def update_notebook_theme(payload: NotebookThemeUpdate) -> NotebookConfig:
+        set_notebook_theme(payload.theme)
+        return notebook_config()
 
     @router.get("/config/files", response_model=list[ConfigFile])
     def config_files() -> list[ConfigFile]:
