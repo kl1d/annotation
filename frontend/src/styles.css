@@ -1968,6 +1968,126 @@ select {
   background: color-mix(in srgb, var(--panel) 85%, #0b1220 15%);
 }
 
+.notebooks-page {
+  min-height: calc(100vh - 44px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+}
+
+.notebooks-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border-radius: 16px;
+}
+
+.notebooks-toolbar-title {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.notebooks-toolbar-title .eyebrow,
+.notebooks-toolbar-title h2 {
+  margin: 0;
+}
+
+.notebooks-toolbar-title h2 {
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.notebooks-toolbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.notebooks-theme-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.notebooks-theme-control select {
+  min-width: 112px;
+  border: 1px solid var(--input-border);
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: var(--input-bg);
+  color: var(--input-text);
+}
+
+.notebooks-frame-panel {
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--surface-elevated);
+}
+
+.notebooks-frame {
+  display: block;
+  width: 100%;
+  height: calc(100vh - 112px);
+  min-height: 560px;
+  border: 0;
+  background: var(--surface-elevated);
+}
+
+.notebooks-unavailable {
+  min-height: 560px;
+  height: calc(100vh - 112px);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 50% 40%, rgba(69, 137, 255, 0.16), transparent 28%),
+    var(--surface-elevated);
+}
+
+.notebooks-unavailable-card {
+  width: min(100%, 620px);
+  padding: 24px;
+  border: 1px solid var(--surface-border);
+  border-radius: 20px;
+  background: var(--surface-bg);
+  box-shadow: var(--surface-shadow);
+  display: grid;
+  gap: 12px;
+}
+
+.notebooks-unavailable-card h3,
+.notebooks-unavailable-card p {
+  margin: 0;
+}
+
+.notebooks-command-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.notebooks-command-row code {
+  min-width: 0;
+  overflow: auto;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  color: var(--input-text);
+  font-family: var(--font-mono);
+}
+
 .settings-list {
   align-self: start;
 }
@@ -2226,10 +2346,25 @@ td {
   }
 
   .data-file-list,
-  .ag-grid-host {
+  .ag-grid-host,
+  .notebooks-frame,
+  .notebooks-unavailable {
     max-height: none;
     height: auto;
     min-height: 420px;
+  }
+
+  .notebooks-toolbar {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .notebooks-toolbar-controls {
+    justify-content: flex-start;
+  }
+
+  .notebooks-command-row {
+    grid-template-columns: 1fr;
   }
 
 }

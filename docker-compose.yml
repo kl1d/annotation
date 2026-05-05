@@ -6,8 +6,12 @@ services:
     environment:
       WORKSPACE_ROOT: /workspace
       PROJECT_DIR: ${PROJECT_DIR:-project}
+      JUPYTER_URL: http://localhost:${JUPYTER_PORT:-8888}/lab
+      JUPYTER_INTERNAL_URL: http://notebooks:8888
+      JUPYTER_TOKEN: ${JUPYTER_TOKEN:-annotation-local-token}
+      JUPYTER_DEFAULT_THEME: ${JUPYTER_DEFAULT_THEME:-JupyterLab Dark}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./backend:/app
       - .:/workspace
@@ -15,16 +19,41 @@ services:
   frontend:
     build:
       context: ./frontend
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0 --port 5173"
     environment:
       VITE_API_BASE_URL: http://localhost:8000/api
     ports:
-      - "5173:5173"
+      - "127.0.0.1:5173:5173"
     volumes:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules
     depends_on:
       - backend
+
+  notebooks:
+    profiles:
+      - notebooks
+    image: quay.io/jupyter/base-notebook:python-3.11
+    command:
+      - start-notebook.py
+      - --ServerApp.ip=0.0.0.0
+      - --ServerApp.port=8888
+      - --ServerApp.root_dir=/workspace
+      - --ServerApp.token=${JUPYTER_TOKEN:-annotation-local-token}
+      - --ServerApp.password=
+    environment:
+      JUPYTER_ENABLE_LAB: "yes"
+      JUPYTER_TOKEN: ${JUPYTER_TOKEN:-annotation-local-token}
+      JUPYTERLAB_DEFAULT_THEME: ${JUPYTER_DEFAULT_THEME:-JupyterLab Dark}
+    ports:
+      - "127.0.0.1:${JUPYTER_PORT:-8888}:8888"
+    healthcheck:
+      disable: true
+    volumes:
+      - .:/workspace
+      - ./notebooks/before-notebook.d/20annotation-default-theme.sh:/usr/local/bin/before-notebook.d/20annotation-default-theme.sh:ro
+      - ./notebooks/jupyter_server_config.py:/etc/jupyter/jupyter_server_config.py:ro
+    working_dir: /workspace
 
 volumes:
   frontend_node_modules:

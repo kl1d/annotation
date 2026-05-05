@@ -144,6 +144,20 @@ export type IngestResult = {
   tags_seeded: number;
 };
 
+export type NotebookConfig = {
+  enabled: boolean;
+  available: boolean;
+  url: string;
+  launch_url: string;
+  token_required: boolean;
+  active_project: string;
+  workspace_path: string;
+  status_message: string;
+  start_command: string;
+  theme: string;
+  available_themes: string[];
+};
+
 export type SessionCsvFile = {
   file_id: string;
   label: string;
@@ -170,6 +184,12 @@ export const api = {
       body: JSON.stringify({ project_id: projectId }),
     }),
   getConfig: () => request<ProjectConfig>("/config"),
+  getNotebookConfig: () => request<NotebookConfig>("/notebooks/config"),
+  setNotebookTheme: (theme: string) =>
+    request<NotebookConfig>("/notebooks/theme", {
+      method: "PUT",
+      body: JSON.stringify({ theme }),
+    }),
   getConfigFiles: () => request<ConfigFile[]>("/config/files"),
   getDataFiles: () => request<SessionCsvFile[]>("/data/files"),
   getDataFilePreview: (fileId: string) =>

@@ -3,6 +3,7 @@ import { NavLink, Route, Routes } from "react-router-dom";
 import DashboardPage from "./pages/DashboardPage";
 import DataPage from "./pages/DataPage";
 import ExportsPage from "./pages/ExportsPage";
+import NotebooksPage from "./pages/NotebooksPage";
 import SettingsPage from "./pages/SettingsPage";
 import SessionPage from "./pages/SessionPage";
 import TagsPage from "./pages/TagsPage";
@@ -10,6 +11,7 @@ import TagsPage from "./pages/TagsPage";
 const navItems = [
   { to: "/", label: "Dashboard", icon: DashboardIcon },
   { to: "/data", label: "Data", icon: DataIcon },
+  { to: "/notebooks", label: "Notebooks", icon: NotebookIcon },
   { to: "/tags", label: "Codebook", icon: CodebookIcon },
   { to: "/exports", label: "Exports", icon: ExportIcon },
   { to: "/settings", label: "Settings", icon: SettingsIcon },
@@ -90,6 +92,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/data" element={<DataPage />} />
+          <Route path="/notebooks" element={<NotebooksPage />} />
           <Route path="/sessions/:sessionId" element={<SessionPage />} />
           <Route path="/tags" element={<TagsPage />} />
           <Route path="/exports" element={<ExportsPage />} />
@@ -122,6 +125,15 @@ function DataIcon() {
     <svg viewBox="0 0 20 20" fill="none">
       <path d="M3 5.5A1.5 1.5 0 0 1 4.5 4h11A1.5 1.5 0 0 1 17 5.5v9A1.5 1.5 0 0 1 15.5 16h-11A1.5 1.5 0 0 1 3 14.5v-9Z" stroke="currentColor" strokeWidth="1.6" />
       <path d="M3 8h14M7 4v12M12 8v8" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
+  );
+}
+
+function NotebookIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none">
+      <path d="M5 3.5h8.5A1.5 1.5 0 0 1 15 5v10a1.5 1.5 0 0 1-1.5 1.5H5V3.5Z" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M5 3.5A2 2 0 0 0 3 5.5v9A2 2 0 0 0 5 16.5M7.5 7h5M7.5 10h5M7.5 13h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     </svg>
   );
 }

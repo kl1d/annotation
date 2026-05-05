@@ -13,7 +13,7 @@ Dockerized, local-first session review and annotation app for screen recordings,
 docker compose up --build
 ```
 
-This starts the app against the tracked sample project in `project/`.
+This starts the essential app services, `backend` and `frontend`, against the tracked sample project in `project/`.
 
 ## Run Your Private Local Study
 
@@ -23,8 +23,23 @@ To run the app against your real local study data instead of the sample project:
 PROJECT_DIR=project.local docker compose up --build
 ```
 
-Frontend: `http://localhost:5173`  
-Backend API: `http://localhost:8000/api`
+- Frontend: `http://localhost:5173`
+- Backend API: `http://localhost:8000/api`
+- JupyterLab: `http://localhost:8888/lab`
+
+## Embedded Notebooks
+
+The Docker Compose stack includes a local-only JupyterLab service for exploratory processing notebooks.
+Open the app and use the `Notebooks` page to launch the embedded notebook workspace.
+
+- JupyterLab is optional and is behind the `notebooks` Compose profile. Start it with `docker compose --profile notebooks up -d notebooks`.
+- JupyterLab is bound to `127.0.0.1` by default and is not exposed on public interfaces.
+- The frontend and backend Compose ports are also bound to `127.0.0.1` for local development.
+- The default token is `annotation-local-token`; override it with `JUPYTER_TOKEN=...`.
+- The notebook server mounts the repo at `/workspace` and opens the active project folder, so it can read and write project `config/`, `data/`, assets, notebooks, and processed outputs.
+- The Notebooks page can switch JupyterLab between the bundled light and dark themes, or match the app theme.
+- If you do not start the profile, the UI will show the command to start JupyterLab later.
+- If port 8888 is already in use, set `JUPYTER_PORT=8890` and restart Docker Compose.
 
 ## Project layout
 

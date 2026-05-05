@@ -25,6 +25,26 @@ class ProjectSelectionUpdate(BaseModel):
     project_id: str
 
 
+class NotebookConfig(BaseModel):
+    enabled: bool = True
+    available: bool = False
+    url: str
+    launch_url: str
+    token_required: bool = True
+    active_project: str
+    workspace_path: str
+    status_message: str = "Notebook service is not running."
+    start_command: str = "docker compose --profile notebooks up -d notebooks"
+    theme: str = "JupyterLab Dark"
+    available_themes: list[str] = Field(
+        default_factory=lambda: ["JupyterLab Dark", "JupyterLab Light"]
+    )
+
+
+class NotebookThemeUpdate(BaseModel):
+    theme: str
+
+
 class ConfigFile(BaseModel):
     name: str
     path: str
