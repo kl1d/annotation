@@ -77,6 +77,7 @@ export default function SessionPage() {
   const [draft, setDraft] = useState<EventDraft>(initialDraft);
   const [timeError, setTimeError] = useState("");
   const [memoBody, setMemoBody] = useState("");
+  const [memoAiMessage, setMemoAiMessage] = useState("");
   const [workspaceNotes, setWorkspaceNotes] = useState("");
   const [canvasTab, setCanvasTab] = useState<CanvasTab>("video");
   const [selectedLogFile, setSelectedLogFile] = useState("all");
@@ -128,6 +129,26 @@ export default function SessionPage() {
     onSuccess: async (memo) => {
       setMemoBody(memo.body);
       await queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
+    },
+  });
+
+  const draftMemoMutation = useMutation({
+    mutationFn: () =>
+      api.runSessionAssistant(sessionId, {
+        action: "draft_memo",
+        prompt: memoBody.trim()
+          ? `Revise or complete this existing memo text:\n${memoBody}`
+          : "Draft a concise editable session memo for the memo textarea.",
+      }),
+    onMutate: () => {
+      setMemoAiMessage("Drafting memo...");
+    },
+    onSuccess: (response) => {
+      setMemoBody(response.content.trim());
+      setMemoAiMessage("AI draft inserted. Review and save when ready.");
+    },
+    onError: (error) => {
+      setMemoAiMessage(error instanceof Error ? error.message : "Failed to draft memo.");
     },
   });
 
@@ -389,6 +410,14 @@ export default function SessionPage() {
     }));
   }
 
+  function runAiAction(prompt: string) {
+    window.dispatchEvent(
+      new CustomEvent("annotation-ai-action", {
+        detail: { prompt },
+      }),
+    );
+  }
+
   if (sessionQuery.isLoading) {
     return <section className="page">Loading session...</section>;
   }
@@ -407,6 +436,19 @@ export default function SessionPage() {
           <span className="pill">{session.status}</span>
         </div>
         <div className="session-header-actions">
+          <button
+            aria-label="Ask AI to summarize this session"
+            className="icon-button ai-wand-button"
+            onClick={() =>
+              runAiAction(
+                "Create a concise session summary with overall behavior, strong evidence, possible annotations, and open questions.",
+              )
+            }
+            title="AI session summary"
+            type="button"
+          >
+            <WandIcon />
+          </button>
           <span className="pill">{sessionQuery.data?.events.length ?? 0} events</span>
           <span className="pill subtle">
             {(sessionQuery.data?.logs.length ?? 0).toLocaleString()} log rows
@@ -562,20 +604,41 @@ export default function SessionPage() {
                 <article className="note-surface">
                   <div className="section-header">
                     <h4>Session memo</h4>
+                    <div className="ai-inline-action">
+                      {draftMemoMutation.isPending ? (
+                        <span className="ai-field-loader compact" role="status" aria-live="polite">
+                          <img alt="" aria-hidden="true" src="/ai-logo.svg" />
+                          <span>Drafting</span>
+                        </span>
+                      ) : null}
+                      <button
+                        aria-label="Ask AI to draft a memo"
+                        className="icon-button ai-wand-button"
+                        disabled={draftMemoMutation.isPending}
+                        onClick={() => draftMemoMutation.mutate()}
+                        title="AI memo draft"
+                        type="button"
+                      >
+                        <WandIcon />
+                      </button>
+                    </div>
                   </div>
                   <textarea
                     className="memo-textarea note-inline-textarea"
+                    disabled={draftMemoMutation.isPending}
                     value={memoBody}
                     onChange={(event) => setMemoBody(event.target.value)}
                     placeholder="Summarize strategy, key moments, design observations, and paper-worthy examples."
                   />
                   <button
                     className="primary-button"
+                    disabled={saveMemoMutation.isPending || draftMemoMutation.isPending}
                     onClick={() => saveMemoMutation.mutate(memoBody)}
                     type="button"
                   >
                     {saveMemoMutation.isPending ? "Saving..." : "Save memo"}
                   </button>
+                  {memoAiMessage ? <p className="muted small">{memoAiMessage}</p> : null}
                 </article>
                 <article className="note-surface">
                   <div className="section-header">
@@ -606,6 +669,19 @@ export default function SessionPage() {
               </span>
             </div>
             <div className="event-inspector-actions">
+              <button
+                aria-label="Ask AI to suggest an event"
+                className="icon-button ai-wand-button"
+                onClick={() =>
+                  runAiAction(
+                    "Suggest one candidate timeline event for the current session. Include event type, title, approximate evidence, and why it should be reviewed before saving.",
+                  )
+                }
+                title="AI event suggestion"
+                type="button"
+              >
+                <WandIcon />
+              </button>
               <button className="ghost-button" onClick={clearEventDraft} type="button">
                 Clear
               </button>
@@ -798,6 +874,19 @@ export default function SessionPage() {
             </span>
           </div>
           <div className="timeline-dock-actions">
+            <button
+              aria-label="Ask AI to review timeline gaps"
+              className="icon-button ai-wand-button"
+              onClick={() =>
+                runAiAction(
+                  "Review the current timeline annotations and identify missing evidence, weak claims, overlapping events, or follow-up questions.",
+                )
+              }
+              title="AI timeline review"
+              type="button"
+            >
+              <WandIcon />
+            </button>
             <span className="pill subtle">{timelineEvents.length} events</span>
           </div>
         </div>
@@ -1065,6 +1154,16 @@ function TimeCaptureIcon() {
     <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
       <circle cx="10" cy="10" r="6.4" stroke="currentColor" strokeWidth="1.5" />
       <path d="M10 6.2v4l2.6 1.6" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+function WandIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M5 15 15 5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
+      <path d="m12.9 4.4 2.7 2.7" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
+      <path d="M4.2 5.2v2M3.2 6.2h2M14.8 12.8v2M13.8 13.8h2M8.2 2.8v1.6M7.4 3.6H9" stroke="currentColor" strokeLinecap="round" strokeWidth="1.2" />
     </svg>
   );
 }

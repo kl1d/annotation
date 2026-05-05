@@ -6,7 +6,7 @@
     <title>Annotation Workbench</title>
     <meta
       name="description"
-      content="Annotation Workbench is a Dockerized, local-first tool for qualitative session review across video, logs, surveys, and annotation timelines."
+      content="Annotation Workbench is a Dockerized, local-first tool for qualitative session review across video, logs, surveys, annotation timelines, and optional AI-assisted memo drafting."
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -20,6 +20,7 @@
           </a>
           <nav class="site-nav">
             <a href="#features">Features</a>
+            <a href="#ai">AI</a>
             <a href="#workflow">Workflow</a>
             <a href="#run">Run</a>
             <a href="#docs">Docs</a>
@@ -48,15 +49,22 @@
         </div>
 
         <div class="hero-content">
-          <span class="hero-chip">Qualitative Session Review</span>
+          <div class="hero-chip-row">
+            <span class="hero-ai-badge">
+              <img src="./ai-logo.svg" alt="" aria-hidden="true" />
+              AI-enabled
+            </span>
+            <span class="hero-chip">Qualitative Session Review + AI Assistance</span>
+          </div>
           <h1>Turn session recordings into structured qualitative insight.</h1>
           <p class="hero-text">
             Review screen recordings, annotate meaningful moments, connect logs and surveys, and
-            export coded evidence from one local-first research workspace.
+            draft evidence-grounded summaries with an optional AI assistant from one local-first
+            research workspace.
           </p>
           <div class="hero-actions">
             <a class="primary-link" href="#run">Get Started</a>
-            <a class="secondary-link" href="#features">See Features</a>
+            <a class="secondary-link" href="#ai">Explore AI Support</a>
           </div>
         </div>
 
@@ -72,6 +80,13 @@
             src="./assets/workbench.png"
             alt="Annotation Workbench session review interface showing video, event editor, and timeline"
           />
+          <div class="hero-ai-bubble" aria-label="AI Assistant preview">
+            <div class="hero-ai-bubble-header">
+              <img src="./ai-logo.svg" alt="" aria-hidden="true" />
+              <strong>AI Assistant</strong>
+            </div>
+            <p>Draft evidence-grounded memos and ask session-aware questions while reviewing.</p>
+          </div>
         </div>
       </section>
 
@@ -86,7 +101,7 @@
         </article>
         <article>
           <strong>Local-first workflow</strong>
-          <p>Keep sensitive qualitative data on the research machine.</p>
+          <p>Keep sensitive qualitative data on the research machine, with provider choice for AI.</p>
         </article>
       </section>
 
@@ -100,6 +115,10 @@
           </p>
         </div>
         <div class="feature-grid">
+          <article class="feature-card feature-card-highlight">
+            <h3>Embedded AI assistance</h3>
+            <p>Draft memos in-place, ask session-aware questions, and keep every AI suggestion reviewable before saving.</p>
+          </article>
           <article class="feature-card">
             <h3>Session review workspace</h3>
             <p>Watch screen recordings, navigate session evidence, and annotate moments on a shared timeline.</p>
@@ -116,6 +135,56 @@
             <h3>Portable study setup</h3>
             <p>Use study-specific config templates while keeping sensitive assets and outputs local.</p>
           </article>
+        </div>
+      </section>
+
+      <section class="section ai-section" id="ai">
+        <div class="ai-section-grid">
+          <div class="section-heading ai-copy">
+            <p class="eyebrow">AI Assistant</p>
+            <h2>AI support that stays inside the review workflow.</h2>
+            <p>
+              Connect OpenAI, Anthropic Claude, Ollama, or an OpenAI-compatible endpoint, then use
+              AI where it helps: drafting editable memo text, summarizing evidence, and asking
+              session-aware questions without leaving the annotation workspace.
+            </p>
+            <div class="ai-capability-list">
+              <span>In-field memo drafting</span>
+              <span>Session-aware chat</span>
+              <span>Provider configurable</span>
+              <span>Reviewer-controlled saves</span>
+            </div>
+          </div>
+          <div class="ai-showcase" aria-label="AI Assistant product preview">
+            <div class="ai-field-preview">
+              <div class="preview-card-header">
+                <strong>Session memo</strong>
+                <span class="ai-loader-chip">
+                  <img src="./ai-logo.svg" alt="" aria-hidden="true" />
+                  Drafting
+                </span>
+              </div>
+              <p>
+                Participant selected option A1 at 03:46, then spent most of the session exploring
+                Task A1 tools. Evidence suggests sustained engagement with some uncertainty about
+                whether the tool exploration reflects confusion or deliberate strategy.
+              </p>
+              <button type="button">Save memo</button>
+            </div>
+            <div class="ai-chat-preview">
+              <div class="preview-card-header">
+                <span class="ai-assistant-title">
+                  <img src="./ai-logo.svg" alt="" aria-hidden="true" />
+                  AI Assistant
+                </span>
+              </div>
+              <div class="chat-bubble user">Summarize this session.</div>
+              <div class="chat-bubble assistant">
+                The participant chose the high-risk path early and stayed focused on Task A1. The
+                strongest evidence appears around 03:46 and the final memo event.
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 

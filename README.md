@@ -1,6 +1,12 @@
 # Annotation Workbench
 
-Dockerized, local-first session review and annotation app for screen recordings, logs, and surveys.
+<p align="center">
+  <img src="docs/logo.svg" alt="Annotation Workbench logo" width="96" />
+</p>
+
+Dockerized, local-first session review and annotation app for screen recordings, logs, surveys, timelines, memos, and optional AI-assisted review.
+
+![Annotation Workbench session review interface](docs/assets/workbench.png)
 
 ## Requirements
 
@@ -41,6 +47,35 @@ Open the app and use the `Notebooks` page to launch the embedded notebook worksp
 - If you do not start the profile, the UI will show the command to start JupyterLab later.
 - If port 8888 is already in use, set `JUPYTER_PORT=8890` and restart Docker Compose.
 
+## AI Assistant
+
+Annotation Workbench includes an optional AI Assistant for first-pass review support. It can:
+
+- draft editable session memo text directly into the memo field
+- answer session-aware questions in a floating assistant panel
+- summarize session evidence and suggest review directions
+- use minute-style timecodes such as `03:46` instead of raw seconds
+- keep every AI output reviewable before it is saved to project data
+
+AI is disabled until you configure a provider from the app’s `Settings` page. Supported provider types:
+
+- OpenAI
+- Anthropic Claude
+- Ollama
+- OpenAI-compatible APIs
+
+Provider settings are stored in the ignored local file `.annotation-workbench.ai.local.json`, so API keys and private endpoints are not committed. You can also configure AI through environment variables:
+
+- `ANNOTATION_AI_ENABLED`
+- `ANNOTATION_AI_PROVIDER`
+- `ANNOTATION_AI_MODEL`
+- `ANNOTATION_AI_BASE_URL`
+- `ANNOTATION_AI_API_KEY`
+- `ANNOTATION_AI_TEMPERATURE`
+- `ANNOTATION_AI_MAX_OUTPUT_TOKENS`
+
+Remote providers may receive selected session context when you use AI actions. Use Ollama or another local endpoint if your study requires all model processing to stay on the local machine.
+
 ## Project layout
 
 - `frontend/`: React + Vite UI
@@ -61,6 +96,8 @@ Open the app and use the `Notebooks` page to launch the embedded notebook worksp
 - [TanStack Query](https://tanstack.com/query/latest) for frontend data fetching and cache invalidation
 - [React Router](https://reactrouter.com/) for app routing
 - [AG Grid Community](https://www.ag-grid.com/react-data-grid/) for the Data page spreadsheet viewer
+- [assistant-ui](https://www.assistant-ui.com/) for the in-app assistant chat surface
+- [LiteLLM](https://www.litellm.ai/) for provider-normalized AI model calls
 - CSV files and the local filesystem as the transparent project data layer
 
 ## Study-specific files
@@ -82,16 +119,23 @@ When both folders are present, you can also switch between them from the app’s
 
 ## Current status
 
-This is the first scaffold:
+This is the first publishable AI-assisted workbench stage:
 - Dockerized frontend/backend
 - Config-driven project loading
 - Folder-based ingest for videos, survey CSVs, and participant log folders
 - Session dashboard and review workspace
 - Timeline event CRUD
 - Tags, memo, logs, surveys, and CSV export routes
+- Tabbed settings for project, AI, and config files
+- Optional provider-configured AI Assistant
+- Floating session-aware AI chat
+- Embedded memo drafting into the memo textarea
+- Local-only AI provider config file ignored by Git
+- Static landing page in `docs/` with AI Assistant positioning
 
 ## Notes For Open-source Use
 
 - the repo ships with a safe sample project in `project/`
 - your real study files should stay in `project.local/`
 - the sample project can be replaced with your own config and assets without changing app code
+- AI keys and provider settings should stay in `.annotation-workbench.ai.local.json` or environment variables

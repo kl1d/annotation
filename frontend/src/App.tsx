@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { NavLink, Route, Routes } from "react-router-dom";
+import { NavLink, Route, Routes, useLocation, matchPath } from "react-router-dom";
+import SessionAiCollaborator, { type AiActionPrompt } from "./components/SessionAiCollaborator";
 import DashboardPage from "./pages/DashboardPage";
 import DataPage from "./pages/DataPage";
 import ExportsPage from "./pages/ExportsPage";
@@ -19,7 +20,12 @@ const navItems = [
 
 export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
+  const [aiActionPrompt, setAiActionPrompt] = useState<AiActionPrompt | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">("dark");
+  const location = useLocation();
+  const sessionMatch = matchPath("/sessions/:sessionId", location.pathname);
+  const activeSessionId = sessionMatch?.params.sessionId;
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem("annotation-theme");
@@ -36,8 +42,27 @@ export default function App() {
     window.localStorage.setItem("annotation-theme", theme);
   }, [theme]);
 
+  useEffect(() => {
+    function handleAiAction(event: Event) {
+      const detail = (event as CustomEvent<{ prompt?: string }>).detail;
+      if (!detail?.prompt) {
+        return;
+      }
+      setAiAssistantOpen(true);
+      setAiActionPrompt({
+        id: Date.now(),
+        prompt: detail.prompt,
+      });
+    }
+
+    window.addEventListener("annotation-ai-action", handleAiAction);
+    return () => window.removeEventListener("annotation-ai-action", handleAiAction);
+  }, []);
+
   return (
-    <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+    <div
+      className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}
+    >
       <aside className="sidebar">
         <div className="sidebar-main">
           <div className="sidebar-brand">
@@ -99,6 +124,13 @@ export default function App() {
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>
+      <SessionAiCollaborator
+        actionPrompt={aiActionPrompt}
+        open={aiAssistantOpen}
+        onClose={() => setAiAssistantOpen(false)}
+        onOpen={() => setAiAssistantOpen(true)}
+        sessionId={activeSessionId}
+      />
     </div>
   );
 }

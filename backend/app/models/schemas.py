@@ -45,6 +45,91 @@ class NotebookThemeUpdate(BaseModel):
     theme: str
 
 
+class AiProviderSummary(BaseModel):
+    provider: str
+    label: str
+    requires_api_key: bool = False
+    supports_base_url: bool = False
+    local: bool = False
+
+
+class AiProviderConfigStatus(BaseModel):
+    enabled: bool = False
+    configured: bool = False
+    provider: str = ""
+    provider_label: str = ""
+    model: str = ""
+    base_url: str = ""
+    api_key_configured: bool = False
+    temperature: float = 0.2
+    max_output_tokens: int = 1200
+    source: str = "default"
+    available_providers: list[AiProviderSummary] = Field(default_factory=list)
+    configuration_required: list[str] = Field(default_factory=list)
+
+
+class AiProviderConfigUpdate(BaseModel):
+    enabled: bool | None = None
+    provider: str | None = None
+    model: str | None = None
+    base_url: str | None = None
+    api_key: str | None = None
+    clear_api_key: bool = False
+    temperature: float | None = None
+    max_output_tokens: int | None = None
+
+
+class AiModelSummary(BaseModel):
+    id: str
+    label: str = ""
+    provider: str
+
+
+class AiProviderTestResult(BaseModel):
+    ok: bool = False
+    status: str
+    message: str
+    config: AiProviderConfigStatus
+
+
+class AiAssistantRequest(BaseModel):
+    action: str
+    prompt: str = ""
+    selected_log_event_ids: list[str] = Field(default_factory=list)
+    selected_survey_row_ids: list[str] = Field(default_factory=list)
+
+
+class AiAssistantResponse(BaseModel):
+    action: str
+    provider: str
+    model: str
+    content: str
+    suggestions: dict[str, Any] = Field(default_factory=dict)
+
+
+class AiChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class AiChatRequest(BaseModel):
+    messages: list[AiChatMessage] = Field(default_factory=list)
+    action: str = "chat"
+    context_mode: str = "session"
+
+
+class AiChatResponse(BaseModel):
+    message: str
+    provider: str
+    model: str
+
+
+class AiSuggestionApplyRequest(BaseModel):
+    action: str
+    target: str
+    suggestion: dict[str, Any] = Field(default_factory=dict)
+
+
 class ConfigFile(BaseModel):
     name: str
     path: str

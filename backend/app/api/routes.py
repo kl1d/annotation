@@ -1,7 +1,7 @@
 import json
 import os
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator
 from urllib.error import URLError
 from urllib.parse import quote
 from urllib.request import Request as UrlRequest
@@ -11,6 +11,14 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse, StreamingResponse
 
 from app.models.schemas import (
+    AiAssistantRequest,
+    AiAssistantResponse,
+    AiChatRequest,
+    AiChatResponse,
+    AiModelSummary,
+    AiProviderConfigStatus,
+    AiProviderConfigUpdate,
+    AiProviderTestResult,
     AnnotationSchema,
     ConfigFile,
     ConfigFileUpdate,
@@ -31,6 +39,7 @@ from app.models.schemas import (
     TagCreate,
     TagUpdate,
 )
+from app.services.ai_assistant import AiAssistantService
 from app.services.project_manager import ProjectManager
 from app.services.project_service import ProjectService
 
@@ -38,7 +47,7 @@ NOTEBOOK_THEMES = ["JupyterLab Dark", "JupyterLab Light"]
 THEMES_SETTING_ID = "@jupyterlab/apputils-extension:themes"
 
 
-def build_router(project_manager: ProjectManager) -> APIRouter:
+def build_router(project_manager: ProjectManager, ai_assistant: AiAssistantService) -> APIRouter:
     router = APIRouter(prefix="/api")
 
     def current_service() -> ProjectService:
@@ -176,6 +185,25 @@ def build_router(project_manager: ProjectManager) -> APIRouter:
     def update_notebook_theme(payload: NotebookThemeUpdate) -> NotebookConfig:
         set_notebook_theme(payload.theme)
         return notebook_config()
+
+    @router.get("/ai/config", response_model=AiProviderConfigStatus)
+    def ai_config() -> AiProviderConfigStatus:
+        return ai_assistant.config_status()
+
+    @router.put("/ai/config", response_model=AiProviderConfigStatus)
+    def update_ai_config(payload: AiProviderConfigUpdate) -> AiProviderConfigStatus:
+        try:
+            return ai_assistant.update_config(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @router.post("/ai/test", response_model=AiProviderTestResult)
+    def test_ai_config() -> AiProviderTestResult:
+        return ai_assistant.test_config()
+
+    @router.get("/ai/models", response_model=list[AiModelSummary])
+    def ai_models() -> list[AiModelSummary]:
+        return ai_assistant.list_models()
 
     @router.get("/config/files", response_model=list[ConfigFile])
     def config_files() -> list[ConfigFile]:
@@ -352,6 +380,100 @@ def build_router(project_manager: ProjectManager) -> APIRouter:
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    @router.post("/sessions/{session_id}/ai/assist", response_model=AiAssistantResponse)
+    def ai_assist(session_id: str, payload: AiAssistantRequest) -> AiAssistantResponse:
+        service = current_service()
+        session = service.get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if payload.action not in {"summarize_session", "draft_memo"}:
+            raise HTTPException(status_code=400, detail="Unsupported AI assistant action")
+        try:
+            status = ai_assistant.config_status()
+            context = (
+                build_session_memo_context(service, session_id, payload)
+                if payload.action == "draft_memo"
+                else build_session_summary_context(service, session_id, payload)
+            )
+            system_prompt = (
+                "You are embedded in Annotation Workbench as a UI writing assistant. "
+                "Return only the editable text that should be inserted into the target field. "
+                "Do not include meta commentary, greetings, markdown fences, or instructions to the user. "
+                "When referencing video or event time, always use minute timecodes like 03:46, never raw seconds. "
+                "Keep the output concise, evidence-grounded, and easy for a researcher to edit."
+                if payload.action == "draft_memo"
+                else (
+                    "You are an annotation research assistant. Summarize only the provided "
+                    "session context. Keep uncertainty visible and do not invent evidence. "
+                    "When referencing video or event time, always use minute timecodes like 03:46, never raw seconds."
+                )
+            )
+            content = ai_assistant.complete(
+                [
+                    {
+                        "role": "system",
+                        "content": system_prompt,
+                    },
+                    {"role": "user", "content": context},
+                ]
+            )
+        except NotImplementedError as exc:
+            raise HTTPException(status_code=501, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return AiAssistantResponse(
+            action=payload.action,
+            provider=status.provider,
+            model=status.model,
+            content=content,
+            suggestions={},
+        )
+
+    @router.post("/sessions/{session_id}/ai/chat", response_model=AiChatResponse)
+    def ai_chat(session_id: str, payload: AiChatRequest) -> AiChatResponse:
+        service = current_service()
+        session = service.get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if not payload.messages:
+            raise HTTPException(status_code=400, detail="Chat messages are required")
+        try:
+            status = ai_assistant.config_status()
+            context = build_session_summary_context(
+                service,
+                session_id,
+                AiAssistantRequest(action=payload.context_mode, prompt=""),
+            )
+            messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an AI collaborator inside Annotation Workbench. Help the reviewer analyze "
+                        "the provided session context. Be concise, cite evidence from the context, and keep "
+                        "all suggestions reviewable rather than final. When referencing video or event time, "
+                        "always use minute timecodes like 03:46, never raw seconds."
+                    ),
+                },
+                {"role": "user", "content": context},
+                *[
+                    {
+                        "role": message.role if message.role in {"user", "assistant"} else "user",
+                        "content": message.content,
+                    }
+                    for message in payload.messages[-12:]
+                ],
+            ]
+            content = ai_assistant.complete(messages)
+        except NotImplementedError as exc:
+            raise HTTPException(status_code=501, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return AiChatResponse(
+            message=content,
+            provider=status.provider,
+            model=status.model,
+        )
+
     @router.get("/export/{name}.csv")
     def export_csv(name: str) -> Response:
         try:
@@ -365,6 +487,222 @@ def build_router(project_manager: ProjectManager) -> APIRouter:
         )
 
     return router
+
+
+def build_session_summary_context(
+    service: ProjectService,
+    session_id: str,
+    payload: AiAssistantRequest,
+) -> str:
+    session = service.get_session(session_id)
+    if not session:
+        raise ValueError(f"Unknown session: {session_id}")
+
+    events = service.list_events(session_id)
+    memo = service.get_memo(session_id)
+    logs = selected_or_limited_rows(
+        service.list_logs(session_id),
+        selected_ids=payload.selected_log_event_ids,
+        id_field="log_event_id",
+        limit=80,
+    )
+    surveys = selected_or_limited_rows(
+        service.list_surveys(session_id),
+        selected_ids=payload.selected_survey_row_ids,
+        id_field="row_id",
+        limit=40,
+    )
+    tags = [tag for tag in service.list_tags() if tag.get("archived") != "true"]
+    schema = service.get_annotation_schema()
+
+    lines = [
+        "Task: Draft a concise session summary for a human reviewer.",
+        "",
+        "Return sections:",
+        "- Overall behavior",
+        "- Strong evidence",
+        "- Possible annotations to review",
+        "- Open questions",
+        "",
+        f"Reviewer focus: {truncate_text(payload.prompt, 600) if payload.prompt else 'none'}",
+        "",
+        "Session:",
+        f"- session_id: {session.session_id}",
+        f"- participant_id: {session.participant_id}",
+        f"- status: {session.status}",
+        f"- video_path: {session.video_path}",
+        f"- log_path: {session.log_path}",
+        "",
+        "Annotation schema event types:",
+        ", ".join(schema.get("event_types", [])) or "none",
+        "",
+        "Available tags:",
+        *format_tag_rows(tags[:60]),
+        "",
+        "Existing timeline events:",
+        *format_event_rows(events[:80]),
+        "",
+        "Current memo:",
+        truncate_text(memo.get("body", ""), 2000) or "none",
+        "",
+        "Survey context:",
+        *format_survey_rows(surveys),
+        "",
+        "Log context:",
+        *format_log_rows(logs),
+    ]
+    return "\n".join(lines)
+
+
+def build_session_memo_context(
+    service: ProjectService,
+    session_id: str,
+    payload: AiAssistantRequest,
+) -> str:
+    session = service.get_session(session_id)
+    if not session:
+        raise ValueError(f"Unknown session: {session_id}")
+
+    events = service.list_events(session_id)
+    memo = service.get_memo(session_id)
+    logs = selected_or_limited_rows(
+        service.list_logs(session_id),
+        selected_ids=payload.selected_log_event_ids,
+        id_field="log_event_id",
+        limit=30,
+    )
+    surveys = selected_or_limited_rows(
+        service.list_surveys(session_id),
+        selected_ids=payload.selected_survey_row_ids,
+        id_field="row_id",
+        limit=20,
+    )
+
+    lines = [
+        "Task: Draft text for the Session memo textarea.",
+        "",
+        "Output requirements:",
+        "- Return only the memo body that should be inserted into the field.",
+        "- Keep it under 180 words.",
+        "- Use 2-4 short paragraphs or compact bullets.",
+        "- Focus on observed participant behavior, evidence, and reviewable uncertainty.",
+        "- Reference time only as minute timecodes like 03:46 or 12:05; never use raw seconds.",
+        "- Do not ask broad follow-up questions unless the evidence clearly leaves a specific gap.",
+        "- Do not include headings like Overall behavior, Strong evidence, or Open questions unless they improve the editable memo.",
+        "",
+        f"Reviewer focus/current field text: {truncate_text(payload.prompt, 1200) if payload.prompt else 'none'}",
+        "",
+        "Session:",
+        f"- session_id: {session.session_id}",
+        f"- participant_id: {session.participant_id}",
+        f"- status: {session.status}",
+        "",
+        "Existing timeline events:",
+        *format_event_rows(events[:60]),
+        "",
+        "Current memo:",
+        truncate_text(memo.get("body", ""), 1600) or "none",
+        "",
+        "Survey context:",
+        *format_survey_rows(surveys),
+        "",
+        "Log context:",
+        *format_log_rows(logs),
+    ]
+    return "\n".join(lines)
+
+
+def selected_or_limited_rows(
+    rows: list[dict[str, Any]],
+    selected_ids: list[str],
+    id_field: str,
+    limit: int,
+) -> list[dict[str, Any]]:
+    if selected_ids:
+        selected = set(selected_ids)
+        return [row for row in rows if row.get(id_field) in selected][:limit]
+    return rows[:limit]
+
+
+def format_tag_rows(tags: list[dict[str, Any]]) -> list[str]:
+    if not tags:
+        return ["- none"]
+    return [
+        f"- {truncate_text(tag.get('category', ''), 40)} / {truncate_text(tag.get('name', ''), 60)}"
+        for tag in tags
+    ]
+
+
+def format_event_rows(events: list[dict[str, Any]]) -> list[str]:
+    if not events:
+        return ["- none"]
+    rows = []
+    for event in events:
+        rows.append(
+            " | ".join(
+                [
+                    f"- {format_timecode(event.get('start_time_sec'))}-{format_timecode(event.get('end_time_sec'))}",
+                    truncate_text(event.get("event_type", ""), 50),
+                    truncate_text(event.get("task_path", ""), 80),
+                    truncate_text(event.get("title", ""), 140),
+                    truncate_text(event.get("evidence_note", ""), 240),
+                ]
+            )
+        )
+    return rows
+
+
+def format_survey_rows(surveys: list[dict[str, Any]]) -> list[str]:
+    if not surveys:
+        return ["- none"]
+    rows = []
+    for row in surveys:
+        rows.append(
+            " | ".join(
+                [
+                    f"- {truncate_text(row.get('survey_name', ''), 80)}",
+                    truncate_text(row.get("question_text", ""), 160),
+                    truncate_text(row.get("response", ""), 240),
+                ]
+            )
+        )
+    return rows
+
+
+def format_log_rows(logs: list[dict[str, Any]]) -> list[str]:
+    if not logs:
+        return ["- none"]
+    rows = []
+    for row in logs:
+        rows.append(
+            " | ".join(
+                [
+                    f"- {truncate_text(row.get('source_file', ''), 80)}:{row.get('line_number', '')}",
+                    format_timecode(row.get("timestamp_sec")),
+                    truncate_text(row.get("event_class", ""), 50),
+                    truncate_text(row.get("raw_text", ""), 260),
+                ]
+            )
+        )
+    return rows
+
+
+def truncate_text(value: object, max_length: int) -> str:
+    text = str(value or "").strip()
+    if len(text) <= max_length:
+        return text
+    return f"{text[: max_length - 1]}..."
+
+
+def format_timecode(value: object) -> str:
+    if value is None or value == "":
+        return ""
+    try:
+        total_seconds = max(0, int(round(float(str(value)))))
+    except (TypeError, ValueError):
+        return truncate_text(value, 40)
+    minutes, seconds = divmod(total_seconds, 60)
+    return f"{minutes:02d}:{seconds:02d}"
 
 
 def parse_range_header(range_header: str, file_size: int) -> tuple[int, int]:
