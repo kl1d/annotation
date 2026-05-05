@@ -118,6 +118,22 @@ export type ProjectConfig = {
   paths: Record<string, string>;
 };
 
+export type AnnotationSchemaField = {
+  key: string;
+  label: string;
+  required: boolean;
+  input: string;
+  options: string[];
+  suggestions: string[];
+};
+
+export type AnnotationSchema = {
+  event_types: string[];
+  required_event_fields: string[];
+  optional_event_fields: string[];
+  fields: AnnotationSchemaField[];
+};
+
 export type ProjectTarget = {
   project_id: string;
   label: string;
@@ -184,6 +200,7 @@ export const api = {
       body: JSON.stringify({ project_id: projectId }),
     }),
   getConfig: () => request<ProjectConfig>("/config"),
+  getAnnotationSchema: () => request<AnnotationSchema>("/annotation-schema"),
   getNotebookConfig: () => request<NotebookConfig>("/notebooks/config"),
   setNotebookTheme: (theme: string) =>
     request<NotebookConfig>("/notebooks/theme", {
@@ -202,6 +219,11 @@ export const api = {
   getSessions: () => request<SessionSummary[]>("/sessions"),
   ingestSessions: () => request<IngestResult>("/sessions/ingest", { method: "POST" }),
   getSession: (sessionId: string) => request<SessionDetail>(`/sessions/${sessionId}`),
+  updateSession: (sessionId: string, payload: Pick<SessionSummary, "status">) =>
+    request<SessionSummary>(`/sessions/${sessionId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
   getSessionCsvFiles: (sessionId: string) =>
     request<SessionCsvFile[]>(`/sessions/${sessionId}/csv-files`),
   getSessionCsvPreview: (sessionId: string, fileId: string) =>

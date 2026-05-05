@@ -55,10 +55,26 @@ class ConfigFileUpdate(BaseModel):
     content: str
 
 
+class AnnotationSchemaField(BaseModel):
+    key: str
+    label: str
+    required: bool = False
+    input: str = "text"
+    options: list[str] = Field(default_factory=list)
+    suggestions: list[str] = Field(default_factory=list)
+
+
+class AnnotationSchema(BaseModel):
+    event_types: list[str] = Field(default_factory=list)
+    required_event_fields: list[str] = Field(default_factory=list)
+    optional_event_fields: list[str] = Field(default_factory=list)
+    fields: list[AnnotationSchemaField] = Field(default_factory=list)
+
+
 class SessionSummary(BaseModel):
     session_id: str
     participant_id: str
-    status: str = "active"
+    status: str = "needs_review"
     video_path: str = ""
     video_url: str | None = None
     log_path: str = ""
@@ -68,6 +84,10 @@ class SessionSummary(BaseModel):
     annotation_count: int = 0
     starred_count: int = 0
     last_updated: str | None = None
+
+
+class SessionUpdate(BaseModel):
+    status: str | None = None
 
 
 class EventBase(BaseModel):

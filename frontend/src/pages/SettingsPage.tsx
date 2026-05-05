@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { api, ConfigFile } from "../lib/api";
+import { api, type AnnotationSchema, type AnnotationSchemaField, ConfigFile } from "../lib/api";
 
 const configOrder = [
   "project",
@@ -10,6 +10,75 @@ const configOrder = [
   "annotation_schema",
   "codebook",
 ];
+
+const annotationSchemaFieldOrder = [
+  "start_time_sec",
+  "end_time_sec",
+  "event_type",
+  "task_path",
+  "title",
+  "evidence_note",
+  "tag_ids",
+] as const;
+
+const annotationSchemaFieldDefaults: Record<(typeof annotationSchemaFieldOrder)[number], AnnotationSchemaField> = {
+  start_time_sec: {
+    key: "start_time_sec",
+    label: "Start",
+    required: true,
+    input: "timecode",
+    options: [],
+    suggestions: [],
+  },
+  end_time_sec: {
+    key: "end_time_sec",
+    label: "End",
+    required: false,
+    input: "timecode",
+    options: [],
+    suggestions: [],
+  },
+  event_type: {
+    key: "event_type",
+    label: "Event type",
+    required: true,
+    input: "select",
+    options: [],
+    suggestions: [],
+  },
+  task_path: {
+    key: "task_path",
+    label: "Task name",
+    required: false,
+    input: "text",
+    options: [],
+    suggestions: ["A1", "A2", "B1", "B2", "B3"],
+  },
+  title: {
+    key: "title",
+    label: "Title",
+    required: true,
+    input: "text",
+    options: [],
+    suggestions: [],
+  },
+  evidence_note: {
+    key: "evidence_note",
+    label: "Notes",
+    required: false,
+    input: "textarea",
+    options: [],
+    suggestions: [],
+  },
+  tag_ids: {
+    key: "tag_ids",
+    label: "Tags",
+    required: false,
+    input: "tags",
+    options: [],
+    suggestions: [],
+  },
+};
 
 export default function SettingsPage() {
   const queryClient = useQueryClient();
@@ -21,18 +90,27 @@ export default function SettingsPage() {
     queryKey: ["config-files"],
     queryFn: api.getConfigFiles,
   });
+  const annotationSchemaQuery = useQuery({
+    queryKey: ["annotation-schema"],
+    queryFn: api.getAnnotationSchema,
+  });
   const [selectedFile, setSelectedFile] = useState("project");
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [annotationSchemaDraft, setAnnotationSchemaDraft] = useState<AnnotationSchema | null>(null);
   const [message, setMessage] = useState<string>("");
 
   const saveMutation = useMutation({
     mutationFn: ({ name, content }: { name: string; content: string }) =>
       api.saveConfigFile(name, content),
-    onSuccess: async (saved) => {
+    onSuccess: async (saved, variables) => {
+      if (variables.name === "annotation_schema") {
+        setAnnotationSchemaDraft(null);
+      }
       setMessage(`Saved ${saved.path}. Run ingest to apply mapping changes to normalized data.`);
       await queryClient.invalidateQueries({ queryKey: ["config-files"] });
       await queryClient.invalidateQueries({ queryKey: ["config"] });
+      await queryClient.invalidateQueries({ queryKey: ["annotation-schema"] });
     },
     onError: (error) => {
       setMessage(error instanceof Error ? error.message : "Failed to save config file.");
@@ -58,10 +136,12 @@ export default function SettingsPage() {
     onSuccess: async (selection) => {
       setSelectedProjectId(selection.active_project);
       setDrafts({});
+      setAnnotationSchemaDraft(null);
       setMessage(`Switched to ${selection.active_project}. Reloaded project config, sessions, and data views.`);
       await queryClient.invalidateQueries({ queryKey: ["projects"] });
       await queryClient.invalidateQueries({ queryKey: ["config"] });
       await queryClient.invalidateQueries({ queryKey: ["config-files"] });
+      await queryClient.invalidateQueries({ queryKey: ["annotation-schema"] });
       await queryClient.invalidateQueries({ queryKey: ["sessions"] });
       await queryClient.invalidateQueries({ queryKey: ["data-files"] });
     },
@@ -92,6 +172,18 @@ export default function SettingsPage() {
     setSelectedProjectId((current) => current || projectsQuery.data.active_project);
   }, [projectsQuery.data]);
 
+  useEffect(() => {
+    if (!annotationSchemaQuery.data || annotationSchemaDraft) {
+      return;
+    }
+    const normalized = normalizeEditableAnnotationSchema(annotationSchemaQuery.data);
+    setAnnotationSchemaDraft(normalized);
+    setDrafts((current) => ({
+      ...current,
+      annotation_schema: serializeAnnotationSchema(normalized),
+    }));
+  }, [annotationSchemaDraft, annotationSchemaQuery.data]);
+
   const configFiles = useMemo(() => {
     const source = configFilesQuery.data ?? [];
     return [...source].sort(
@@ -102,10 +194,35 @@ export default function SettingsPage() {
 
   const activeFile = configFiles.find((file) => file.name === selectedFile) ?? configFiles[0];
   const activeContent = activeFile ? drafts[activeFile.name] ?? activeFile.content : "";
+  const editableAnnotationSchema = annotationSchemaDraft
+    ? normalizeEditableAnnotationSchema(annotationSchemaDraft)
+    : annotationSchemaQuery.data
+      ? normalizeEditableAnnotationSchema(annotationSchemaQuery.data)
+      : null;
 
   function handleReload(file: ConfigFile) {
     setDrafts((current) => ({ ...current, [file.name]: file.content }));
+    if (file.name === "annotation_schema" && annotationSchemaQuery.data) {
+      const normalized = normalizeEditableAnnotationSchema(annotationSchemaQuery.data);
+      setAnnotationSchemaDraft(normalized);
+      setDrafts((current) => ({
+        ...current,
+        annotation_schema: serializeAnnotationSchema(normalized),
+      }));
+    }
     setMessage(`Reloaded ${file.path} from disk.`);
+  }
+
+  function updateAnnotationSchema(updater: (current: AnnotationSchema) => AnnotationSchema) {
+    setAnnotationSchemaDraft((current) => {
+      const base = normalizeEditableAnnotationSchema(current ?? annotationSchemaQuery.data ?? emptyAnnotationSchema());
+      const next = normalizeEditableAnnotationSchema(updater(base));
+      setDrafts((draftCurrent) => ({
+        ...draftCurrent,
+        annotation_schema: serializeAnnotationSchema(next),
+      }));
+      return next;
+    });
   }
 
   return (
@@ -220,17 +337,134 @@ export default function SettingsPage() {
                   </button>
                 </div>
               </div>
-              <textarea
-                className="config-editor"
-                onChange={(event) =>
-                  setDrafts((current) => ({
-                    ...current,
-                    [activeFile.name]: event.target.value,
-                  }))
-                }
-                spellCheck={false}
-                value={activeContent}
-              />
+              {activeFile.name === "annotation_schema" && editableAnnotationSchema ? (
+                <div className="annotation-schema-editor">
+                  <section className="annotation-schema-section">
+                    <div className="section-header">
+                      <div>
+                        <h4>Event form fields</h4>
+                        <p className="muted small">These rows drive what appears in the session event editor.</p>
+                      </div>
+                    </div>
+                    <div className="annotation-schema-field-list">
+                      {annotationSchemaFieldOrder.map((fieldKey) => {
+                        const field = editableAnnotationSchema.fields.find((item) => item.key === fieldKey) ?? annotationSchemaFieldDefaults[fieldKey];
+                        const enabled =
+                          editableAnnotationSchema.required_event_fields.includes(fieldKey) ||
+                          editableAnnotationSchema.optional_event_fields.includes(fieldKey);
+                        const required = editableAnnotationSchema.required_event_fields.includes(fieldKey);
+
+                        return (
+                          <div className="annotation-schema-field-row" key={fieldKey}>
+                            <div className="annotation-schema-field-meta">
+                              <strong>{fieldKey}</strong>
+                              <span className="muted small">{field.input}</span>
+                            </div>
+                            <label className="annotation-schema-toggle">
+                              <span>Show</span>
+                              <input
+                                checked={enabled}
+                                onChange={(event) =>
+                                  updateAnnotationSchema((current) =>
+                                    setAnnotationFieldEnabled(current, fieldKey, event.target.checked),
+                                  )
+                                }
+                                type="checkbox"
+                              />
+                            </label>
+                            <label className="annotation-schema-toggle">
+                              <span>Required</span>
+                              <input
+                                checked={required}
+                                disabled={!enabled}
+                                onChange={(event) =>
+                                  updateAnnotationSchema((current) =>
+                                    setAnnotationFieldRequired(current, fieldKey, event.target.checked),
+                                  )
+                                }
+                                type="checkbox"
+                              />
+                            </label>
+                            <label className="annotation-schema-label-field">
+                              <span className="muted small">Label</span>
+                              <input
+                                onChange={(event) =>
+                                  updateAnnotationSchema((current) =>
+                                    updateAnnotationField(current, fieldKey, { label: event.target.value }),
+                                  )
+                                }
+                                value={field.label}
+                              />
+                            </label>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+
+                  <section className="annotation-schema-section">
+                    <div className="annotation-schema-grid">
+                      <label>
+                        <span className="muted small">Event type options</span>
+                        <textarea
+                          className="config-editor annotation-schema-textarea"
+                          onChange={(event) =>
+                            updateAnnotationSchema((current) =>
+                              updateAnnotationField(current, "event_type", {
+                                options: parseLineList(event.target.value),
+                              }),
+                            )
+                          }
+                          spellCheck={false}
+                          value={(editableAnnotationSchema.fields.find((field) => field.key === "event_type")?.options ?? []).join("\n")}
+                        />
+                      </label>
+                      <label>
+                        <span className="muted small">Task name suggestions</span>
+                        <textarea
+                          className="config-editor annotation-schema-textarea"
+                          onChange={(event) =>
+                            updateAnnotationSchema((current) =>
+                              updateAnnotationField(current, "task_path", {
+                                suggestions: parseLineList(event.target.value),
+                              }),
+                            )
+                          }
+                          spellCheck={false}
+                          value={(editableAnnotationSchema.fields.find((field) => field.key === "task_path")?.suggestions ?? []).join("\n")}
+                        />
+                      </label>
+                    </div>
+                  </section>
+
+                  <details className="annotation-schema-raw">
+                    <summary>Raw YAML</summary>
+                    <textarea
+                      className="config-editor"
+                      onChange={(event) =>
+                        setDrafts((current) => ({
+                          ...current,
+                          [activeFile.name]: event.target.value,
+                        }))
+                      }
+                      spellCheck={false}
+                      value={activeContent}
+                    />
+                  </details>
+                </div>
+              ) : (
+                <textarea
+                  className="config-editor"
+                  onChange={(event) =>
+                    setDrafts((current) => ({
+                      ...current,
+                      [activeFile.name]: event.target.value,
+                    }))
+                  }
+                  spellCheck={false}
+                  value={activeContent}
+                />
+              )}
             </>
           ) : (
             <div className="empty-state">No config files found.</div>
@@ -239,4 +473,147 @@ export default function SettingsPage() {
       </div>
     </section>
   );
+}
+
+function emptyAnnotationSchema(): AnnotationSchema {
+  return {
+    event_types: [],
+    required_event_fields: [],
+    optional_event_fields: [],
+    fields: [],
+  };
+}
+
+function normalizeEditableAnnotationSchema(source: AnnotationSchema): AnnotationSchema {
+  const fields = annotationSchemaFieldOrder.map((key) => {
+    const existing = source.fields.find((field) => field.key === key);
+    const defaults = annotationSchemaFieldDefaults[key];
+    return {
+      ...defaults,
+      ...existing,
+      key,
+      label: existing?.label || defaults.label,
+      input: existing?.input || defaults.input,
+      options: existing?.options?.length ? existing.options : defaults.options,
+      suggestions: existing?.suggestions?.length ? existing.suggestions : defaults.suggestions,
+    };
+  });
+
+  return {
+    event_types: source.event_types?.length
+      ? source.event_types
+      : fields.find((field) => field.key === "event_type")?.options ?? [],
+    required_event_fields: annotationSchemaFieldOrder.filter((key) => source.required_event_fields.includes(key)),
+    optional_event_fields: annotationSchemaFieldOrder.filter((key) => source.optional_event_fields.includes(key)),
+    fields,
+  };
+}
+
+function updateAnnotationField(
+  schema: AnnotationSchema,
+  key: (typeof annotationSchemaFieldOrder)[number],
+  patch: Partial<AnnotationSchemaField>,
+): AnnotationSchema {
+  const fields = schema.fields.map((field) => (field.key === key ? { ...field, ...patch, key } : field));
+  const next = {
+    ...schema,
+    fields,
+  };
+  if (key === "event_type" && patch.options) {
+    next.event_types = patch.options;
+  }
+  return next;
+}
+
+function setAnnotationFieldEnabled(
+  schema: AnnotationSchema,
+  key: (typeof annotationSchemaFieldOrder)[number],
+  enabled: boolean,
+): AnnotationSchema {
+  const required = schema.required_event_fields.filter((field) => field !== key);
+  const optional = schema.optional_event_fields.filter((field) => field !== key);
+
+  if (!enabled) {
+    return {
+      ...schema,
+      required_event_fields: required,
+      optional_event_fields: optional,
+    };
+  }
+
+  return {
+    ...schema,
+    required_event_fields: required,
+    optional_event_fields: [...optional, key],
+  };
+}
+
+function setAnnotationFieldRequired(
+  schema: AnnotationSchema,
+  key: (typeof annotationSchemaFieldOrder)[number],
+  required: boolean,
+): AnnotationSchema {
+  const nextRequired = schema.required_event_fields.filter((field) => field !== key);
+  const nextOptional = schema.optional_event_fields.filter((field) => field !== key);
+
+  if (required) {
+    return {
+      ...schema,
+      required_event_fields: [...nextRequired, key],
+      optional_event_fields: nextOptional,
+    };
+  }
+
+  return {
+    ...schema,
+    required_event_fields: nextRequired,
+    optional_event_fields: [...nextOptional, key],
+  };
+}
+
+function parseLineList(value: string) {
+  return value
+    .split("\n")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function serializeAnnotationSchema(schema: AnnotationSchema) {
+  const lines = [
+    "event_types:",
+    ...serializeYamlList(schema.event_types),
+    "required_event_fields:",
+    ...serializeYamlList(schema.required_event_fields),
+    "optional_event_fields:",
+    ...serializeYamlList(schema.optional_event_fields),
+    "field_config:",
+  ];
+
+  for (const field of schema.fields) {
+    lines.push(`  ${field.key}:`);
+    lines.push(`    label: ${quoteYamlString(field.label)}`);
+    lines.push(`    input: ${field.input}`);
+    if (field.key === "event_type") {
+      lines.push("    options_from: event_types");
+    }
+    if (field.suggestions.length) {
+      lines.push("    suggestions:");
+      for (const suggestion of field.suggestions) {
+        lines.push(`      - ${quoteYamlString(suggestion)}`);
+      }
+    }
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
+function serializeYamlList(values: string[]) {
+  if (!values.length) {
+    return ["  []"];
+  }
+  return values.map((value) => `  - ${quoteYamlString(value)}`);
+}
+
+function quoteYamlString(value: string) {
+  return JSON.stringify(value);
 }

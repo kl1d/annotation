@@ -182,6 +182,48 @@ class ProjectService:
             paths=project_config.get("paths", {}),
         )
 
+    def get_annotation_schema(self) -> dict[str, Any]:
+        schema = self.load_yaml("annotation_schema.yaml")
+        event_types = self._normalize_string_list(schema.get("event_types")) or ["other"]
+        required_fields = self._normalize_string_list(schema.get("required_event_fields")) or [
+            "start_time_sec",
+            "event_type",
+            "title",
+        ]
+        optional_fields = self._normalize_string_list(schema.get("optional_event_fields")) or [
+            "end_time_sec",
+            "task_path",
+            "evidence_note",
+            "tag_ids",
+        ]
+        field_config = schema.get("field_config")
+        if not isinstance(field_config, dict):
+            field_config = {}
+
+        ordered_keys = list(dict.fromkeys(required_fields + optional_fields))
+        fields = []
+        for key in ordered_keys:
+            config = field_config.get(key, {})
+            if not isinstance(config, dict):
+                config = {}
+            fields.append(
+                {
+                    "key": key,
+                    "label": str(config.get("label") or self._humanize_field_name(key)),
+                    "required": key in required_fields,
+                    "input": str(config.get("input") or self._infer_annotation_input_type(key)),
+                    "options": self._annotation_field_options(key, config, schema, event_types),
+                    "suggestions": self._normalize_string_list(config.get("suggestions")),
+                }
+            )
+
+        return {
+            "event_types": event_types,
+            "required_event_fields": required_fields,
+            "optional_event_fields": optional_fields,
+            "fields": fields,
+        }
+
     def list_sessions(self) -> list[SessionSummary]:
         sessions = self.repo.read_rows("sessions.csv", SESSIONS_FIELDS)
         events = self.repo.read_rows("timeline_events.csv", EVENT_FIELDS)
@@ -208,7 +250,7 @@ class ProjectService:
                 SessionSummary(
                     session_id=session_id,
                     participant_id=row.get("participant_id", ""),
-                    status=row.get("status", "active"),
+                    status=row.get("status") or "needs_review",
                     video_path=video_path,
                     video_url=self.session_video_url(session_id, video_path),
                     log_path=row.get("log_path", ""),
@@ -221,6 +263,65 @@ class ProjectService:
                 )
             )
         return sorted(results, key=lambda session: session.participant_id)
+
+    def update_session(self, session_id: str, payload: dict[str, Any]) -> SessionSummary:
+        rows = self.repo.read_rows("sessions.csv", SESSIONS_FIELDS)
+        updated = False
+        for row in rows:
+            if row.get("session_id") != session_id:
+                continue
+            status = str(payload.get("status", "")).strip()
+            if status:
+                row["status"] = status
+            updated = True
+            break
+
+        if not updated:
+            raise ValueError(f"Unknown session: {session_id}")
+
+        self.repo.write_rows("sessions.csv", SESSIONS_FIELDS, rows)
+        session = self.get_session(session_id)
+        if not session:
+            raise ValueError(f"Unknown session: {session_id}")
+        return session
+
+    def _normalize_string_list(self, value: Any) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        return [str(item).strip() for item in value if str(item).strip()]
+
+    def _humanize_field_name(self, value: str) -> str:
+        return value.replace("_", " ").strip().title()
+
+    def _infer_annotation_input_type(self, key: str) -> str:
+        if key in {"start_time_sec", "end_time_sec"}:
+            return "timecode"
+        if key in {"event_type", "source_type", "confidence"}:
+            return "select"
+        if key == "evidence_note":
+            return "textarea"
+        if key == "tag_ids":
+            return "tags"
+        return "text"
+
+    def _annotation_field_options(
+        self,
+        key: str,
+        config: dict[str, Any],
+        schema: dict[str, Any],
+        event_types: list[str],
+    ) -> list[str]:
+        explicit_options = self._normalize_string_list(config.get("options"))
+        if explicit_options:
+            return explicit_options
+
+        options_from = str(config.get("options_from", "")).strip()
+        if options_from:
+            return self._normalize_string_list(schema.get(options_from))
+
+        if key == "event_type":
+            return event_types
+        return []
 
     def get_session(self, session_id: str) -> SessionSummary | None:
         for session in self.list_sessions():
@@ -486,6 +587,17 @@ class ProjectService:
         log_config = self.load_yaml("log_mappings.yaml")
         codebook = self.load_yaml("codebook.yaml")
         asset_mappings = self.load_yaml("asset_mappings.yaml")
+        existing_sessions = self.repo.read_rows("sessions.csv", SESSIONS_FIELDS)
+        existing_session_by_id = {
+            row.get("session_id", ""): row
+            for row in existing_sessions
+            if row.get("session_id")
+        }
+        existing_session_by_participant = {
+            self._participant_code(row.get("participant_id", "")): row
+            for row in existing_sessions
+            if self._participant_code(row.get("participant_id", ""))
+        }
 
         paths = project_config.get("paths", {})
         videos_dir = self.project_root / paths.get("videos_dir", "assets/videos")
@@ -515,7 +627,7 @@ class ProjectService:
                 participant_regex,
                 mapped_assets,
             )
-            if participant_id:
+            if participant_id and not self._has_participant_code(participant_ids, participant_id):
                 participant_ids.add(participant_id)
 
         participants_rows = []
@@ -532,12 +644,17 @@ class ProjectService:
         self.repo.write_rows("participants.csv", PARTICIPANTS_FIELDS, participants_rows)
 
         sessions_rows = []
+        ingested_at = now_iso()
         for participant_id in sorted(participant_ids):
+            session_id = f"S_{participant_id}"
+            existing_session = existing_session_by_id.get(session_id) or existing_session_by_participant.get(
+                self._participant_code(participant_id)
+            )
             video_path = self._match_video_path(videos_dir, participant_id, mapped_assets)
             log_path = self._match_log_path(logs_dir, participant_id, mapped_assets)
             sessions_rows.append(
                 {
-                    "session_id": f"S_{participant_id}",
+                    "session_id": session_id,
                     "participant_id": participant_id,
                     "video_path": video_path,
                     "log_path": log_path,
@@ -548,8 +665,8 @@ class ProjectService:
                     "post_survey_path": self._survey_source_for_participant(
                         survey_rows, participant_id, "post"
                     ),
-                    "status": "active",
-                    "created_at": now_iso(),
+                    "status": (existing_session or {}).get("status") or "needs_review",
+                    "created_at": (existing_session or {}).get("created_at") or ingested_at,
                 }
             )
         self.repo.write_rows("sessions.csv", SESSIONS_FIELDS, sessions_rows)
@@ -824,12 +941,12 @@ class ProjectService:
         if not raw_value:
             return ""
         if not mapping_config:
-            return raw_value.strip()
+            return self._normalize_participant_id(raw_value)
         mapping = self._load_lookup_map(mapping_config)
         lookup_key = self._normalize_lookup_value(
             raw_value, mapping_config.get("normalize", "lower")
         )
-        return mapping.get(lookup_key, "")
+        return self._normalize_participant_id(mapping.get(lookup_key, ""))
 
     def _parse_surveys(
         self, survey_config: dict[str, Any]
@@ -1090,27 +1207,37 @@ class ProjectService:
     def _match_video_path(
         self, videos_dir: Path, participant_id: str, mapped_assets: dict[str, dict[str, str]]
     ) -> str:
-        mapped_video = mapped_assets.get(participant_id, {}).get("video_file", "")
+        mapped_video = self._mapped_asset_for_participant(participant_id, mapped_assets).get(
+            "video_file", ""
+        )
         if mapped_video:
             return mapped_video
+        participant_code = self._participant_code(participant_id)
         for candidate in sorted(videos_dir.glob("*.mp4")):
             if participant_id.lower() in candidate.stem.lower():
+                return str(candidate.relative_to(self.project_root))
+            if participant_code and participant_code == self._participant_code(candidate.stem):
                 return str(candidate.relative_to(self.project_root))
         return ""
 
     def _match_log_path(
         self, logs_dir: Path, participant_id: str, mapped_assets: dict[str, dict[str, str]]
     ) -> str:
-        mapped_log_dir = mapped_assets.get(participant_id, {}).get("log_dir", "")
+        mapped_log_dir = self._mapped_asset_for_participant(participant_id, mapped_assets).get(
+            "log_dir", ""
+        )
         if mapped_log_dir:
             return mapped_log_dir
         if not logs_dir.exists():
             return ""
+        participant_code = self._participant_code(participant_id)
         participant_dir = logs_dir / participant_id
         if participant_dir.exists():
             return str(participant_dir.relative_to(self.project_root))
         for candidate in sorted(path for path in logs_dir.iterdir() if path.is_dir()):
             if participant_id.lower() in candidate.name.lower():
+                return str(candidate.relative_to(self.project_root))
+            if participant_code and participant_code == self._participant_code(candidate.name):
                 return str(candidate.relative_to(self.project_root))
         return ""
 
@@ -1131,7 +1258,51 @@ class ProjectService:
         for participant_id, mapping in mapped_assets.items():
             if mapping.get("video_file") == relative_path:
                 return participant_id
-        return self._extract_participant_id(Path(relative_path).stem, participant_regex)
+        stem = Path(relative_path).stem
+        return self._extract_participant_id(stem, participant_regex) or self._participant_code(
+            stem
+        )
+
+    @staticmethod
+    def _mapped_asset_for_participant(
+        participant_id: str, mapped_assets: dict[str, dict[str, str]]
+    ) -> dict[str, str]:
+        direct_match = mapped_assets.get(participant_id)
+        if direct_match:
+            return direct_match
+        participant_code = ProjectService._participant_code(participant_id)
+        if not participant_code:
+            return {}
+        for mapped_participant_id, mapping in mapped_assets.items():
+            if ProjectService._participant_code(mapped_participant_id) == participant_code:
+                return mapping
+        return {}
+
+    @staticmethod
+    def _has_participant_code(participant_ids: set[str], participant_id: str) -> bool:
+        participant_code = ProjectService._participant_code(participant_id)
+        if not participant_code:
+            return participant_id in participant_ids
+        return any(
+            existing_id == participant_id
+            or ProjectService._participant_code(existing_id) == participant_code
+            for existing_id in participant_ids
+        )
+
+    @staticmethod
+    def _participant_code(value: str) -> str:
+        normalized = value.strip().lower()
+        participant_match = re.search(r"participant[-_ ]*(?P<number>\d+)", normalized)
+        if participant_match:
+            return f"p{participant_match.group('number')}"
+        pxx_match = re.search(r"(?<![a-z0-9])p[-_ ]?(?P<number>\d+)(?![a-z0-9])", normalized)
+        if pxx_match:
+            return f"p{pxx_match.group('number')}"
+        return ""
+
+    @staticmethod
+    def _normalize_participant_id(value: str) -> str:
+        return ProjectService._participant_code(value) or value.strip()
 
     @staticmethod
     def _matching_log_rule(filename: str, file_rules: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -1181,7 +1352,7 @@ class ProjectService:
         if not match:
             return None
         group = match.groupdict().get("participant_id")
-        return (group or match.group(0)).strip()
+        return ProjectService._normalize_participant_id(group or match.group(0))
 
     def _build_merged_csv(self) -> str:
         fieldnames = [
