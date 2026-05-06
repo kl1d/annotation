@@ -53,9 +53,25 @@ class AiProviderSummary(BaseModel):
     local: bool = False
 
 
+class AiProviderConfigProfile(BaseModel):
+    profile_id: str
+    name: str
+    active: bool = False
+    configured: bool = False
+    provider: str = ""
+    provider_label: str = ""
+    model: str = ""
+    base_url: str = ""
+    api_key_configured: bool = False
+    temperature: float = 0.2
+    max_output_tokens: int = 1200
+    configuration_required: list[str] = Field(default_factory=list)
+
+
 class AiProviderConfigStatus(BaseModel):
     enabled: bool = False
     configured: bool = False
+    active_profile_id: str = ""
     provider: str = ""
     provider_label: str = ""
     model: str = ""
@@ -66,10 +82,15 @@ class AiProviderConfigStatus(BaseModel):
     source: str = "default"
     available_providers: list[AiProviderSummary] = Field(default_factory=list)
     configuration_required: list[str] = Field(default_factory=list)
+    profiles: list[AiProviderConfigProfile] = Field(default_factory=list)
 
 
 class AiProviderConfigUpdate(BaseModel):
     enabled: bool | None = None
+    profile_id: str | None = None
+    profile_name: str | None = None
+    activate: bool = True
+    create_profile: bool = False
     provider: str | None = None
     model: str | None = None
     base_url: str | None = None

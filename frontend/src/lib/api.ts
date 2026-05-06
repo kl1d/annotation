@@ -208,6 +208,7 @@ export type AiProviderSummary = {
 export type AiProviderConfigStatus = {
   enabled: boolean;
   configured: boolean;
+  active_profile_id: string;
   provider: string;
   provider_label: string;
   model: string;
@@ -218,10 +219,30 @@ export type AiProviderConfigStatus = {
   source: string;
   available_providers: AiProviderSummary[];
   configuration_required: string[];
+  profiles: AiProviderConfigProfile[];
+};
+
+export type AiProviderConfigProfile = {
+  profile_id: string;
+  name: string;
+  active: boolean;
+  configured: boolean;
+  provider: string;
+  provider_label: string;
+  model: string;
+  base_url: string;
+  api_key_configured: boolean;
+  temperature: number;
+  max_output_tokens: number;
+  configuration_required: string[];
 };
 
 export type AiProviderConfigUpdate = {
   enabled?: boolean;
+  profile_id?: string;
+  profile_name?: string;
+  activate?: boolean;
+  create_profile?: boolean;
   provider?: string;
   model?: string;
   base_url?: string;
@@ -330,6 +351,15 @@ export const api = {
     signal?: AbortSignal,
   ) =>
     request<AiChatResponse>(`/sessions/${sessionId}/ai/chat`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+      signal,
+    }),
+  runAiChat: (
+    payload: { messages: AiChatMessage[]; action?: string; context_mode?: string },
+    signal?: AbortSignal,
+  ) =>
+    request<AiChatResponse>("/ai/chat", {
       method: "POST",
       body: JSON.stringify(payload),
       signal,

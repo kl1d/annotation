@@ -87,6 +87,9 @@ const annotationSchemaFieldDefaults: Record<(typeof annotationSchemaFieldOrder)[
 };
 
 type AiConfigDraft = {
+  profile_id: string;
+  profile_name: string;
+  create_profile: boolean;
   enabled: boolean;
   provider: string;
   model: string;
@@ -100,6 +103,9 @@ type AiConfigDraft = {
 type SettingsTab = "project" | "ai" | "config";
 
 const defaultAiConfigDraft: AiConfigDraft = {
+  profile_id: "",
+  profile_name: "",
+  create_profile: true,
   enabled: false,
   provider: "",
   model: "",
@@ -192,7 +198,7 @@ export default function SettingsPage() {
       setAiConfigDraft(draftFromAiConfig(config));
       setMessage(
         config.enabled
-          ? `Saved AI Assistant settings for ${config.provider_label || config.provider}.`
+          ? `Saved AI Assistant profile ${activeAiProfileLabel(config)}.`
           : "Saved AI Assistant settings. AI remains disabled.",
       );
       await queryClient.invalidateQueries({ queryKey: ["ai-config"] });
@@ -214,6 +220,23 @@ export default function SettingsPage() {
     },
     onError: (error) => {
       setMessage(error instanceof Error ? error.message : "Failed to test AI Assistant settings.");
+    },
+  });
+
+  const activateAiProfileMutation = useMutation({
+    mutationFn: (profileId: string) =>
+      api.saveAiConfig({
+        enabled: aiConfigDraft.enabled,
+        profile_id: profileId,
+        activate: true,
+      }),
+    onSuccess: async (config) => {
+      setAiConfigDraft(draftFromAiConfig(config));
+      setMessage(`Activated ${activeAiProfileLabel(config)}.`);
+      await queryClient.invalidateQueries({ queryKey: ["ai-config"] });
+    },
+    onError: (error) => {
+      setMessage(error instanceof Error ? error.message : "Failed to activate AI profile.");
     },
   });
 
@@ -277,11 +300,13 @@ export default function SettingsPage() {
     (provider) => provider.provider === aiConfigDraft.provider,
   );
   const aiConfig = aiConfigQuery.data;
+  const selectedAiProfile = aiConfig?.profiles.find(
+    (profile) => profile.profile_id === aiConfigDraft.profile_id,
+  );
   const savedAiProviderId = aiConfig?.provider || "";
   const draftUsesSavedKey = Boolean(
     selectedAiProvider?.requires_api_key &&
-      aiConfigDraft.provider === savedAiProviderId &&
-      aiConfig?.api_key_configured &&
+      selectedAiProfile?.api_key_configured &&
       !aiConfigDraft.clear_api_key,
   );
   const draftApiKeyConfigured = Boolean(aiConfigDraft.api_key.trim() || draftUsesSavedKey);
@@ -482,7 +507,52 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        <div className="ai-profile-toolbar">
+          <label>
+            <span className="muted small">Saved configuration</span>
+            <select
+              onChange={(event) => {
+                const profile = aiConfig?.profiles.find((item) => item.profile_id === event.target.value);
+                if (profile) {
+                  setAiConfigDraft(draftFromAiProfile(profile, aiConfigDraft.enabled));
+                  setMessage("");
+                }
+              }}
+              value={aiConfigDraft.profile_id}
+            >
+              <option value="">New configuration</option>
+              {(aiConfig?.profiles ?? []).map((profile) => (
+                <option key={profile.profile_id} value={profile.profile_id}>
+                  {profile.name}{profile.active ? " (active)" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="ghost-button"
+            onClick={() =>
+              setAiConfigDraft({
+                ...defaultAiConfigDraft,
+                enabled: aiConfigDraft.enabled,
+                profile_name: "New configuration",
+              })
+            }
+            type="button"
+          >
+            New configuration
+          </button>
+        </div>
+
         <div className="ai-settings-grid">
+          <label>
+            <span className="muted small">Configuration name</span>
+            <input
+              onChange={(event) => updateAiConfigDraft({ profile_name: event.target.value })}
+              placeholder="e.g. Local Llama, OpenAI review"
+              value={aiConfigDraft.profile_name}
+            />
+          </label>
+
           <label>
             <span className="muted small">Provider</span>
             <select
@@ -614,6 +684,59 @@ export default function SettingsPage() {
             >
               {saveAiConfigMutation.isPending ? "Saving..." : "Save AI settings"}
             </button>
+          </div>
+        </div>
+
+        <div className="ai-provider-list" aria-label="Saved AI configurations">
+          <div className="ai-provider-list-header">
+            <div>
+              <h4>Saved configurations</h4>
+              <p className="muted small">Keep multiple providers/models and choose which one the assistant uses.</p>
+            </div>
+            <span className="muted small">{aiConfig?.profiles.length ?? 0} saved</span>
+          </div>
+
+          <div className="ai-provider-rows">
+            {(aiConfig?.profiles ?? []).map((profile) => (
+              <div className={`ai-provider-row ${profile.active ? "active" : ""}`} key={profile.profile_id}>
+                <div className="ai-provider-row-main">
+                  <div>
+                    <strong>{profile.name}</strong>
+                    <p className="muted small">
+                      {profile.provider_label || profile.provider || "No provider"}
+                      {profile.model ? ` · ${profile.model}` : ""}
+                    </p>
+                  </div>
+                  <div className="ai-provider-badges">
+                    {profile.active ? <span className="ai-provider-badge active">In use</span> : null}
+                    <span className={`ai-provider-badge ${profile.configured ? "configured" : "warning"}`}>
+                      {profile.configured ? "Configured" : "Needs setup"}
+                    </span>
+                  </div>
+                </div>
+                <div className="ai-provider-row-meta">
+                  <span>{profile.api_key_configured ? "API key saved" : "No API key saved"}</span>
+                  {profile.base_url ? <span>{profile.base_url}</span> : <span>Provider default URL</span>}
+                  {profile.configuration_required.length ? (
+                    <span>Missing {profile.configuration_required.join(", ")}</span>
+                  ) : null}
+                  <button
+                    className="ghost-button"
+                    disabled={activateAiProfileMutation.isPending || profile.active}
+                    onClick={() => activateAiProfileMutation.mutate(profile.profile_id)}
+                    type="button"
+                  >
+                    {profile.active ? "Active" : "Activate"}
+                  </button>
+                </div>
+              </div>
+            ))}
+            {!(aiConfig?.profiles.length ?? 0) ? (
+              <div className="ai-provider-empty">
+                <strong>No saved configurations yet.</strong>
+                <span className="muted small">Fill the form above, then save to create your first profile.</span>
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -1020,7 +1143,11 @@ function quoteYamlString(value: string) {
 }
 
 function draftFromAiConfig(config: AiProviderConfigStatus): AiConfigDraft {
+  const activeProfile = config.profiles.find((profile) => profile.active);
   return {
+    profile_id: config.active_profile_id,
+    profile_name: activeProfile?.name ?? "",
+    create_profile: false,
     enabled: config.enabled,
     provider: config.provider,
     model: config.model,
@@ -1032,10 +1159,30 @@ function draftFromAiConfig(config: AiProviderConfigStatus): AiConfigDraft {
   };
 }
 
+function draftFromAiProfile(profile: AiProviderConfigStatus["profiles"][number], enabled: boolean): AiConfigDraft {
+  return {
+    profile_id: profile.profile_id,
+    profile_name: profile.name,
+    create_profile: false,
+    enabled,
+    provider: profile.provider,
+    model: profile.model,
+    base_url: profile.base_url,
+    api_key: "",
+    clear_api_key: false,
+    temperature: String(profile.temperature),
+    max_output_tokens: String(profile.max_output_tokens),
+  };
+}
+
 function buildAiConfigPayload(draft: AiConfigDraft) {
   const apiKey = draft.api_key.trim();
   return {
     enabled: draft.enabled,
+    ...(draft.profile_id ? { profile_id: draft.profile_id } : {}),
+    profile_name: draft.profile_name.trim(),
+    create_profile: draft.create_profile,
+    activate: true,
     provider: draft.provider.trim(),
     model: draft.model.trim(),
     base_url: draft.base_url.trim(),
@@ -1044,6 +1191,15 @@ function buildAiConfigPayload(draft: AiConfigDraft) {
     temperature: parseNumberOrDefault(draft.temperature, 0.2),
     max_output_tokens: Math.round(parseNumberOrDefault(draft.max_output_tokens, 1200)),
   };
+}
+
+function activeAiProfileLabel(config: AiProviderConfigStatus) {
+  return (
+    config.profiles.find((profile) => profile.profile_id === config.active_profile_id)?.name ||
+    config.provider_label ||
+    config.provider ||
+    "AI configuration"
+  );
 }
 
 function parseNumberOrDefault(value: string, fallback: number) {

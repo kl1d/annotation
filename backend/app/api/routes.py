@@ -205,6 +205,44 @@ def build_router(project_manager: ProjectManager, ai_assistant: AiAssistantServi
     def ai_models() -> list[AiModelSummary]:
         return ai_assistant.list_models()
 
+    @router.post("/ai/chat", response_model=AiChatResponse)
+    def ai_general_chat(payload: AiChatRequest) -> AiChatResponse:
+        if not payload.messages:
+            raise HTTPException(status_code=400, detail="Chat messages are required")
+        try:
+            status = ai_assistant.config_status()
+            context = build_project_chat_context(current_service())
+            messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an AI collaborator inside Annotation Workbench. Help with general "
+                        "annotation, qualitative analysis, project setup, and review workflow questions. "
+                        "Use the project context when it is relevant, but do not invent session-specific "
+                        "evidence. If the user needs evidence from a recording, tell them to choose a "
+                        "session context. Be concise and practical."
+                    ),
+                },
+                {"role": "user", "content": context},
+                *[
+                    {
+                        "role": message.role if message.role in {"user", "assistant"} else "user",
+                        "content": message.content,
+                    }
+                    for message in payload.messages[-12:]
+                ],
+            ]
+            content = ai_assistant.complete(messages)
+        except NotImplementedError as exc:
+            raise HTTPException(status_code=501, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return AiChatResponse(
+            message=content,
+            provider=status.provider,
+            model=status.model,
+        )
+
     @router.get("/config/files", response_model=list[ConfigFile])
     def config_files() -> list[ConfigFile]:
         return [ConfigFile(**item) for item in current_service().list_config_files()]
@@ -608,6 +646,59 @@ def build_session_memo_context(
         "",
         "Log context:",
         *format_log_rows(logs),
+    ]
+    return "\n".join(lines)
+
+
+def build_project_chat_context(service: ProjectService) -> str:
+    project = service.project_summary()
+    sessions = service.list_sessions()
+    tags = [tag for tag in service.list_tags() if tag.get("archived") != "true"]
+    schema = service.get_annotation_schema()
+    data_files = service.list_project_csv_files()
+    status_counts: dict[str, int] = {}
+    for session in sessions:
+        status_counts[session.status] = status_counts.get(session.status, 0) + 1
+
+    lines = [
+        "Task: General AI chat for Annotation Workbench.",
+        "",
+        "Use this context only when relevant. Do not claim access to a current recording unless a session context is selected.",
+        "",
+        "Project:",
+        f"- project_name: {project.project_name}",
+        f"- sessions: {len(sessions)}",
+        f"- participant_id_regex: {project.participant_id_regex}",
+        "",
+        "Session status counts:",
+        *([f"- {status}: {count}" for status, count in sorted(status_counts.items())] or ["- none"]),
+        "",
+        "Annotation schema event types:",
+        ", ".join(schema.get("event_types", [])) or "none",
+        "",
+        "Annotation fields:",
+        *[
+            f"- {field.get('key', '')}: {field.get('label', '')}"
+            for field in schema.get("fields", [])[:40]
+        ],
+        "",
+        "Available tags:",
+        *format_tag_rows(tags[:60]),
+        "",
+        "Recent sessions:",
+        *([
+            (
+                f"- {session.session_id}: participant={session.participant_id}, "
+                f"status={session.status}, annotations={session.annotation_count}"
+            )
+            for session in sessions[:30]
+        ] or ["- none"]),
+        "",
+        "Project data files:",
+        *([
+            f"- {file.get('label', file.get('file_id', ''))}: {file.get('description', '')}"
+            for file in data_files[:20]
+        ] or ["- none"]),
     ]
     return "\n".join(lines)
 

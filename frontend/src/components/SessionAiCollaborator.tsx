@@ -9,7 +9,7 @@ import {
   useThreadRuntime,
   type ChatModelAdapter,
 } from "@assistant-ui/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, type AiChatMessage } from "../lib/api";
 
@@ -19,14 +19,23 @@ export type AiActionPrompt = {
 };
 
 const contextOptions = [
-  { value: "session", label: "Session" },
-  { value: "timeline", label: "Timeline" },
-  { value: "memo", label: "Memo" },
-  { value: "logs", label: "Logs" },
-  { value: "surveys", label: "Surveys" },
+  { value: "general", label: "General", requiresSession: false },
+  { value: "session", label: "Session", requiresSession: true },
+  { value: "timeline", label: "Timeline", requiresSession: true },
+  { value: "memo", label: "Memo", requiresSession: true },
+  { value: "logs", label: "Logs", requiresSession: true },
+  { value: "surveys", label: "Surveys", requiresSession: true },
 ];
 
 const aiChatStoragePrefix = "annotation-workbench.ai-chat";
+const aiChatThreadsSuffix = "threads";
+const aiChatThreadHistoryPrefix = "thread";
+
+type AiChatThreadSummary = {
+  id: string;
+  title: string;
+  updatedAt: string;
+};
 
 type SessionAiCollaboratorProps = {
   open: boolean;
@@ -73,8 +82,14 @@ function SessionAiPanel({
   open: boolean;
   sessionId?: string;
 }) {
-  const [contextMode, setContextMode] = useState("session");
+  const [contextMode, setContextMode] = useState(sessionId ? "session" : "general");
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!sessionId && contextMode !== "general") {
+      setContextMode("general");
+    }
+  }, [contextMode, sessionId]);
 
   useEffect(() => {
     if (!open) {
@@ -89,32 +104,27 @@ function SessionAiPanel({
   const modelAdapter = useMemo<ChatModelAdapter>(
     () => ({
       async run({ messages, abortSignal }) {
-        if (!sessionId) {
-          return {
-            content: [{ type: "text", text: "Open a session to use session-aware AI assistance." }],
-          };
-        }
         if (aiConfigured === false) {
           return {
             content: [{ type: "text", text: "AI Assistant is not configured yet. Open Settings > AI Assistant to choose a provider and model." }],
           };
         }
         try {
-          const response = await api.runSessionAiChat(
-            sessionId,
-            {
-              action: "chat",
-              context_mode: contextMode,
-              messages: messages
-                .filter((message) => message.role === "user" || message.role === "assistant")
-                .map((message): AiChatMessage => ({
-                  role: message.role,
-                  content: extractMessageText(message.content),
-                }))
-                .filter((message) => Boolean(message.content.trim())),
-            },
-            abortSignal,
-          );
+          const payload = {
+            action: "chat",
+            context_mode: contextMode,
+            messages: messages
+              .filter((message) => message.role === "user" || message.role === "assistant")
+              .map((message): AiChatMessage => ({
+                role: message.role,
+                content: extractMessageText(message.content),
+              }))
+              .filter((message) => Boolean(message.content.trim())),
+          };
+          const response =
+            sessionId && contextMode !== "general"
+              ? await api.runSessionAiChat(sessionId, payload, abortSignal)
+              : await api.runAiChat(payload, abortSignal);
           return {
             content: [{ type: "text", text: response.message }],
           };
@@ -128,8 +138,23 @@ function SessionAiPanel({
     [aiConfigured, contextMode, sessionId],
   );
   const runtime = useLocalRuntime(modelAdapter);
-  const historyKey = sessionId ? `${aiChatStoragePrefix}.${sessionId}` : "";
+  const chatScopeKey = chatHistoryScopeKey(sessionId, contextMode);
+  const legacyHistoryKey = sessionId && contextMode !== "general" ? `${aiChatStoragePrefix}.${sessionId}` : `${aiChatStoragePrefix}.general`;
+  const [activeThreadId, setActiveThreadId] = useState("");
+  const [threadMenuOpen, setThreadMenuOpen] = useState(false);
+  const [threadListVersion, setThreadListVersion] = useState(0);
+  const refreshThreads = useCallback(() => setThreadListVersion((current) => current + 1), []);
+  const threadSummaries = useMemo(() => loadAiThreadSummaries(chatScopeKey), [chatScopeKey, threadListVersion]);
+  const activeThread = threadSummaries.find((thread) => thread.id === activeThreadId) ?? threadSummaries[0];
+  const historyKey = activeThreadId ? aiThreadHistoryKey(chatScopeKey, activeThreadId) : "";
   const loadedHistoryKey = useRef<string | null>(null);
+
+  useEffect(() => {
+    const summaries = ensureAiThreadSummaries(chatScopeKey, legacyHistoryKey);
+    setActiveThreadId(summaries[0]?.id ?? "");
+    refreshThreads();
+    setThreadMenuOpen(false);
+  }, [chatScopeKey, legacyHistoryKey, refreshThreads]);
 
   useEffect(() => {
     if (!historyKey) {
@@ -154,19 +179,89 @@ function SessionAiPanel({
             <h3>Assistant</h3>
           </div>
         </div>
-        <button
-          aria-label="Close AI Assistant"
-          className="ai-collab-close"
-          onClick={onClose}
-          type="button"
-        >
-          <XIcon />
-        </button>
+        <div className="ai-collab-header-actions">
+          <button
+            aria-label="Clear AI chat"
+            className="ai-collab-close"
+            onClick={() => {
+              const nextThread = deleteAiThread(chatScopeKey, activeThreadId) ?? createAiThreadSummary();
+              if (!loadAiThreadSummaries(chatScopeKey).some((thread) => thread.id === nextThread.id)) {
+                saveAiThreadSummaries(chatScopeKey, [nextThread]);
+              }
+              setActiveThreadId(nextThread.id);
+              refreshThreads();
+              runtime.thread.reset(loadStoredAiMessages(aiThreadHistoryKey(chatScopeKey, nextThread.id)));
+            }}
+            title="Clear chat"
+            type="button"
+          >
+            <TrashIcon />
+          </button>
+          <button
+            aria-label="Close AI Assistant"
+            className="ai-collab-close"
+            onClick={onClose}
+            type="button"
+          >
+            <XIcon />
+          </button>
+        </div>
       </div>
       <AssistantRuntimeProvider runtime={runtime}>
         <AiActionBridge actionPrompt={actionPrompt} />
         <ThreadPrimitive.Root className="ai-thread-root">
-          <AiHistoryPersistence storageKey={historyKey} />
+          <AiHistoryPersistence
+            onPersist={refreshThreads}
+            scopeKey={chatScopeKey}
+            storageKey={historyKey}
+            threadId={activeThreadId}
+          />
+          <div className="ai-chat-switcher">
+            <div className="ai-thread-menu">
+              <button
+                aria-expanded={threadMenuOpen}
+                className="ai-thread-trigger"
+                onClick={() => setThreadMenuOpen((current) => !current)}
+                type="button"
+              >
+                <MessageIcon />
+                <span>{activeThread?.title ?? "New chat"}</span>
+              </button>
+              {threadMenuOpen ? (
+                <div className="ai-thread-options" role="menu">
+                  {threadSummaries.map((thread) => (
+                    <button
+                      className={thread.id === activeThreadId ? "active" : ""}
+                      key={thread.id}
+                      onClick={() => {
+                        setActiveThreadId(thread.id);
+                        setThreadMenuOpen(false);
+                      }}
+                      role="menuitem"
+                      type="button"
+                    >
+                      <span>{thread.title}</span>
+                      <small>{formatThreadDate(thread.updatedAt)}</small>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <button
+              className="ai-thread-new"
+              onClick={() => {
+                const nextThread = createAiThreadSummary();
+                saveAiThreadSummaries(chatScopeKey, [nextThread, ...loadAiThreadSummaries(chatScopeKey)]);
+                setActiveThreadId(nextThread.id);
+                refreshThreads();
+                runtime.thread.reset();
+              }}
+              type="button"
+            >
+              <PlusIcon />
+              New chat
+            </button>
+          </div>
           <ThreadPrimitive.Viewport className="ai-thread-viewport">
             {aiConfigured === false ? (
               <div className="ai-config-notice">
@@ -180,8 +275,8 @@ function SessionAiPanel({
             <ThreadPrimitive.Empty>
               <div className="ai-thread-empty">
                 {sessionId
-                  ? "Ask about this session, or use an action above to start from the current review context."
-                  : "Open a session to use the AI collaborator with review context."}
+                  ? "Ask generally, or choose a session context for review-aware help."
+                  : "Ask anything. Open a session later to add review context."}
               </div>
             </ThreadPrimitive.Empty>
             <ThreadPrimitive.Messages
@@ -194,7 +289,8 @@ function SessionAiPanel({
           </ThreadPrimitive.Viewport>
           <Composer
             contextMode={contextMode}
-            disabled={!sessionId}
+            disabled={false}
+            hasSession={Boolean(sessionId)}
             onContextModeChange={setContextMode}
           />
         </ThreadPrimitive.Root>
@@ -211,12 +307,46 @@ function XIcon() {
   );
 }
 
-function AiHistoryPersistence({ storageKey }: { storageKey: string }) {
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M7 5V3.8h6V5m-8 0h10m-8.8 0 .7 11.2h6.2L13.8 5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+function MessageIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M5 6.2h10M5 10h7.6M4 3.8h12a1.8 1.8 0 0 1 1.8 1.8v6.9a1.8 1.8 0 0 1-1.8 1.8H9.2L5.1 17v-2.7H4a1.8 1.8 0 0 1-1.8-1.8V5.6A1.8 1.8 0 0 1 4 3.8Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M10 4.5v11M4.5 10h11" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function AiHistoryPersistence({
+  onPersist,
+  scopeKey,
+  storageKey,
+  threadId,
+}: {
+  onPersist: () => void;
+  scopeKey: string;
+  storageKey: string;
+  threadId: string;
+}) {
   const messages = useThread((state) => state.messages);
   const isRunning = useThread((state) => state.isRunning);
 
   useEffect(() => {
-    if (!storageKey || isRunning) {
+    if (!storageKey || !threadId || isRunning) {
       return;
     }
     const chatMessages = messages
@@ -229,8 +359,10 @@ function AiHistoryPersistence({ storageKey }: { storageKey: string }) {
 
     if (chatMessages.length) {
       localStorage.setItem(storageKey, JSON.stringify(chatMessages.slice(-30)));
+      updateAiThreadSummary(scopeKey, threadId, chatMessages);
+      onPersist();
     }
-  }, [isRunning, messages, storageKey]);
+  }, [isRunning, messages, onPersist, scopeKey, storageKey, threadId]);
 
   return null;
 }
@@ -272,14 +404,17 @@ function AiActionBridge({ actionPrompt }: { actionPrompt?: AiActionPrompt | null
 function Composer({
   contextMode,
   disabled,
+  hasSession,
   onContextModeChange,
 }: {
   contextMode: string;
   disabled: boolean;
+  hasSession: boolean;
   onContextModeChange: (value: string) => void;
 }) {
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
-  const selectedContext = contextOptions.find((option) => option.value === contextMode) ?? contextOptions[0];
+  const availableContextOptions = contextOptions.filter((option) => hasSession || !option.requiresSession);
+  const selectedContext = availableContextOptions.find((option) => option.value === contextMode) ?? availableContextOptions[0];
 
   return (
     <ComposerPrimitive.Root className="ai-composer">
@@ -297,7 +432,7 @@ function Composer({
           </button>
           {contextMenuOpen ? (
             <div className="ai-context-options" role="menu">
-              {contextOptions.map((option) => (
+              {availableContextOptions.map((option) => (
                 <button
                   className={option.value === contextMode ? "active" : ""}
                   key={option.value}
@@ -317,7 +452,7 @@ function Composer({
         <ComposerPrimitive.Input
           className="ai-composer-input"
           disabled={disabled}
-          placeholder={disabled ? "Open a session to chat" : "Ask anything"}
+          placeholder="Ask anything"
           rows={1}
           submitMode="enter"
         />
@@ -378,7 +513,118 @@ function extractMessageText(content: unknown) {
     .join("\n");
 }
 
-function loadStoredAiMessages(storageKey: string) {
+function chatHistoryScopeKey(sessionId: string | undefined, contextMode: string) {
+  if (!sessionId || contextMode === "general") {
+    return `${aiChatStoragePrefix}.general`;
+  }
+  return `${aiChatStoragePrefix}.${sessionId}.${contextMode}`;
+}
+
+function aiThreadIndexKey(scopeKey: string) {
+  return `${scopeKey}.${aiChatThreadsSuffix}`;
+}
+
+function aiThreadHistoryKey(scopeKey: string, threadId: string) {
+  return `${scopeKey}.${aiChatThreadHistoryPrefix}.${threadId}`;
+}
+
+function createAiThreadId() {
+  return `chat-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createAiThreadSummary(messages: AiChatMessage[] = []): AiChatThreadSummary {
+  return {
+    id: createAiThreadId(),
+    title: aiThreadTitle(messages),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function loadAiThreadSummaries(scopeKey: string): AiChatThreadSummary[] {
+  try {
+    const raw = localStorage.getItem(aiThreadIndexKey(scopeKey));
+    if (!raw) {
+      return [];
+    }
+    const items = JSON.parse(raw);
+    if (!Array.isArray(items)) {
+      return [];
+    }
+    return items
+      .filter((item): item is AiChatThreadSummary =>
+        item &&
+        typeof item === "object" &&
+        typeof item.id === "string" &&
+        typeof item.title === "string" &&
+        typeof item.updatedAt === "string",
+      )
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  } catch {
+    return [];
+  }
+}
+
+function saveAiThreadSummaries(scopeKey: string, summaries: AiChatThreadSummary[]) {
+  const deduped = summaries.filter(
+    (summary, index, items) => items.findIndex((item) => item.id === summary.id) === index,
+  );
+  localStorage.setItem(aiThreadIndexKey(scopeKey), JSON.stringify(deduped.slice(0, 16)));
+}
+
+function ensureAiThreadSummaries(scopeKey: string, legacyHistoryKey: string) {
+  const summaries = loadAiThreadSummaries(scopeKey);
+  if (summaries.length) {
+    return summaries;
+  }
+
+  const legacyMessages = loadStoredChatMessages(legacyHistoryKey);
+  const summary = createAiThreadSummary(legacyMessages);
+  saveAiThreadSummaries(scopeKey, [summary]);
+  if (legacyMessages.length) {
+    localStorage.setItem(aiThreadHistoryKey(scopeKey, summary.id), JSON.stringify(legacyMessages.slice(-30)));
+  }
+  return [summary];
+}
+
+function updateAiThreadSummary(scopeKey: string, threadId: string, messages: AiChatMessage[]) {
+  const summaries = loadAiThreadSummaries(scopeKey).filter((thread) => thread.id !== threadId);
+  saveAiThreadSummaries(scopeKey, [
+    {
+      id: threadId,
+      title: aiThreadTitle(messages),
+      updatedAt: new Date().toISOString(),
+    },
+    ...summaries,
+  ]);
+}
+
+function deleteAiThread(scopeKey: string, threadId: string) {
+  if (threadId) {
+    localStorage.removeItem(aiThreadHistoryKey(scopeKey, threadId));
+  }
+  const summaries = loadAiThreadSummaries(scopeKey).filter((thread) => thread.id !== threadId);
+  saveAiThreadSummaries(scopeKey, summaries);
+  return summaries[0] ?? null;
+}
+
+function aiThreadTitle(messages: AiChatMessage[]) {
+  const firstUserMessage = messages.find((message) => message.role === "user" && message.content.trim());
+  if (!firstUserMessage) {
+    return "New chat";
+  }
+  const title = firstUserMessage.content.trim().replace(/\s+/g, " ");
+  return title.length > 36 ? `${title.slice(0, 34)}...` : title;
+}
+
+function formatThreadDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function loadStoredChatMessages(storageKey: string) {
   try {
     const raw = localStorage.getItem(storageKey);
     if (!raw) {
@@ -394,14 +640,18 @@ function loadStoredAiMessages(storageKey: string) {
         typeof message === "object" &&
         (message.role === "user" || message.role === "assistant") &&
         typeof message.content === "string",
-      )
+      );
+  } catch {
+    return [];
+  }
+}
+
+function loadStoredAiMessages(storageKey: string) {
+  return loadStoredChatMessages(storageKey)
       .map((message) => ({
         role: message.role,
         content: [{ type: "text" as const, text: message.content }],
       }));
-  } catch {
-    return [];
-  }
 }
 
 function formatAiError(error: unknown) {
